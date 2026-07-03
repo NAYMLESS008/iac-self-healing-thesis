@@ -1,0 +1,13 @@
+{
+  "vm_name": "thesis-self-healing-vm",
+  "vm_user": "thesisadmin",
+  "allowed_ssh_keys": [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHxZX3lPZ+dVVK7uvfjnEwVvA/IMDfUvyat8MWz5mDJX thesis-vm"
+  ],
+  "checks": {
+    "ssh_authorized_keys": true,
+    "unexpected_users": false,
+    "cron_persistence": false,
+    "unexpected_ports": false
+  }
+}

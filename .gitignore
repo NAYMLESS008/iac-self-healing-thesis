@@ -1,0 +1,29 @@
+# Terraform local/state files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+
+# SSH keys and generated attacker keys
+*.pem
+*_key
+*_key.pub
+attacks/attacker_key
+attacks/attacker_key.pub
+
+# Temporary/evidence files
+*.tmp
+*.log
+thesis-results/
+evidence/
+.env
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Python cache files
+__pycache__/
+*.pyc
