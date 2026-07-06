@@ -1,0 +1,5 @@
+timestamp_utc,attack_type,detected_condition,recovery_action,validation_status,evidence_file
+2026-07-06T15:32:31.682747+00:00,malicious_cron_persistence,/etc/cron.d/realtime_evil_persistence,remove_cron_file,clean_no_action,
+2026-07-06T15:32:56.687573+00:00,malicious_cron_persistence,/etc/cron.d/realtime_evil_persistence,remove_cron_file,clean_no_action,
+2026-07-06T15:35:36.917174+00:00,malicious_cron_persistence,/etc/cron.d/realtime_evil_persistence,remove_cron_file,clean_no_action,
+2026-07-06T15:37:54.343665+00:00,malicious_cron_persistence,/etc/cron.d/realtime_evil_persistence,remove_cron_file,recovery_validated,evidence\cron_persistence_20260706_153748.txt
