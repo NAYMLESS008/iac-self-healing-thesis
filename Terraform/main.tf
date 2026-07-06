@@ -58,6 +58,24 @@ resource "google_compute_instance" "vm" {
   # Trusted SSH key added during VM creation
   metadata = {
     ssh-keys = "${var.ssh_user}:${file(var.public_key_path)}"
+
+    startup-script = <<-EOT
+      #!/bin/bash
+      set -e
+
+      echo "[STARTUP] Installing Wazuh agent" > /var/log/thesis-startup.log
+
+      curl -sO https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.14.5-1_amd64.deb
+      WAZUH_MANAGER="${var.wazuh_manager_ip}" dpkg -i ./wazuh-agent_4.14.5-1_amd64.deb
+
+            sed -i 's|<directories>/etc,/usr/bin,/usr/sbin</directories>|<directories check_all="yes" realtime="yes" report_changes="yes">/etc,/usr/bin,/usr/sbin</directories>|' /var/ossec/etc/ossec.conf
+
+      systemctl daemon-reload
+      systemctl enable wazuh-agent
+      systemctl start wazuh-agent
+
+      echo "[STARTUP] Wazuh agent installed and started" >> /var/log/thesis-startup.log
+    EOT
   }
 
   # Labels for identifying thesis resources
@@ -66,3 +84,4 @@ resource "google_compute_instance" "vm" {
     role    = "self-healing-test"
   }
 }
+

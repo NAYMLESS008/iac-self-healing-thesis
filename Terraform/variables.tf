@@ -36,3 +36,8 @@ variable "public_key_path" {
 variable "allowed_ssh_cidr" {
   type = string
 }
+# Internal IP address of the separate Wazuh Manager VM
+variable "wazuh_manager_ip" {
+  type        = string
+  description = "Internal IP address of the Wazuh Manager used by the target VM startup script."
+}
