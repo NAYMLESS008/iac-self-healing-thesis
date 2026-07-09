@@ -3,7 +3,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-from iap_helpers import run_wazuh_command
+from iap_helpers import run_wazuh_command, run_target_command
 
 
 ATTACK_PATH = "/etc/cron.d/realtime_evil_persistence"
@@ -38,7 +38,20 @@ def is_recent_alert(alert_timestamp):
     return 0 <= age_seconds <= RECENT_WINDOW_SECONDS
 
 
-def wazuh_alert_exists():
+def target_persistence_exists():
+    """
+    Confirms whether the persistence file currently exists on the target VM.
+
+    This prevents old or already-handled Wazuh alerts from triggering recovery again.
+    """
+    result = run_target_command(
+        f"if test -f {ATTACK_PATH}; then echo EXISTS; else echo MISSING; fi"
+    )
+
+    return "EXISTS" in result["stdout"]
+
+
+def fresh_wazuh_alert_exists():
     remote_command = "sudo tail -n 500 /var/ossec/logs/alerts/alerts.json || true"
 
     result = run_wazuh_command(remote_command)
@@ -90,6 +103,24 @@ def wazuh_alert_exists():
     return False
 
 
+def recoverable_alert_exists():
+    """
+    Recovery is only needed when Wazuh detected a fresh alert
+    and the persistence still exists on the target VM.
+    """
+    if not fresh_wazuh_alert_exists():
+        return False
+
+    print("[2] Confirming persistence still exists on target VM...")
+
+    if target_persistence_exists():
+        print("[CONFIRMED] Persistence is still present on target VM.")
+        return True
+
+    print("[NO ACTION] Fresh alert found, but persistence is already removed.")
+    return False
+
+
 def run_recovery_controller():
     print("[ACTION] Running cron self-healing controller...")
 
@@ -110,13 +141,19 @@ def run_recovery_controller():
 
 
 def main():
+    check_only = "--check-only" in sys.argv
+
     print("[1] Checking Wazuh alerts for fresh cron persistence through IAP...")
 
-    if not wazuh_alert_exists():
-        print("[STOP] No fresh matching Wazuh alert found. Recovery not triggered.")
+    if not recoverable_alert_exists():
+        print("[STOP] No active recoverable cron persistence found. Recovery not triggered.")
         return 1
 
-    print("[2] Fresh Wazuh alert confirmed. Triggering recovery...")
+    if check_only:
+        print("[CHECK ONLY] Active recoverable cron persistence confirmed. Recovery not triggered by this script.")
+        return 0
+
+    print("[3] Fresh Wazuh alert and active persistence confirmed. Triggering recovery...")
 
     if run_recovery_controller():
         print("[DONE] Alert-driven recovery workflow completed.")
