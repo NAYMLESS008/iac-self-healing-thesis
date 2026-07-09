@@ -1,9 +1,9 @@
-import subprocess
+﻿import subprocess
 import sys
 
+from iap_helpers import run_wazuh_command
 
-WAZUH_VM_NAME = "wazuh-manager-vm"
-WAZUH_ZONE = "europe-west1-b"
+
 ATTACK_PATH = "/etc/cron.d/realtime_evil_persistence"
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 
@@ -24,32 +24,21 @@ def wazuh_alert_exists():
         f"| grep '{ATTACK_PATH}' "
         f"| grep 'syscheck' "
         f"| grep 'added' "
-        f"| grep '{TARGET_AGENT_NAME}'"
+        f"| grep '{TARGET_AGENT_NAME}' || true"
     )
 
-    gcloud_command = (
-        f'gcloud compute ssh {WAZUH_VM_NAME} '
-        f'--zone={WAZUH_ZONE} '
-        f'--command "{remote_command}"'
-    )
+    result = run_wazuh_command(remote_command)
 
-    command = [
-        "powershell",
-        "-NoProfile",
-        "-Command",
-        gcloud_command
-    ]
-
-    code, stdout, stderr = run_command(command)
-
-    if stdout:
+    if result["stdout"]:
         print("[WAZUH ALERT FOUND]")
-        print(stdout.splitlines()[-1])
+        print(result["stdout"].splitlines()[-1])
         return True
 
     print("[NO WAZUH ALERT FOUND]")
-    if stderr:
-        print(stderr)
+
+    if result["stderr"]:
+        print("[WAZUH CHECK STDERR]")
+        print(result["stderr"])
 
     return False
 
@@ -74,19 +63,21 @@ def run_recovery_controller():
 
 
 def main():
-    print("[1] Checking Wazuh alerts for cron persistence...")
+    print("[1] Checking Wazuh alerts for cron persistence through IAP...")
 
     if not wazuh_alert_exists():
         print("[STOP] No matching Wazuh alert found. Recovery not triggered.")
-        return
+        return 1
 
     print("[2] Wazuh alert confirmed. Triggering recovery...")
 
     if run_recovery_controller():
         print("[DONE] Alert-driven recovery workflow completed.")
-    else:
-        print("[ERROR] Recovery controller failed.")
+        return 0
+
+    print("[ERROR] Recovery controller failed.")
+    return 2
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
