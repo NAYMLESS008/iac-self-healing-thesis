@@ -1,8 +1,8 @@
-import csv
-import os
-import subprocess
+﻿import csv
 from datetime import datetime, timezone
 from pathlib import Path
+
+from iap_helpers import run_target_command
 
 
 MALICIOUS_CRON = "/etc/cron.d/realtime_evil_persistence"
@@ -12,20 +12,18 @@ RESULTS_FILE = Path("results/experiments.csv")
 
 
 def run_ssh(command):
-    vm_ip = subprocess.check_output(
-        ["terraform", "-chdir=Terraform", "output", "-raw", "external_ip"],
-        text=True
-    ).strip()
+    """
+    Runs a command on the Terraform-managed target VM through IAP.
 
-    ssh_key = os.path.expanduser("~/.ssh/gcp_thesis_vm")
+    Kept as run_ssh() so the rest of the script does not need major changes.
+    """
+    result = run_target_command(command)
 
-    result = subprocess.run(
-        ["ssh", "-o", "StrictHostKeyChecking=accept-new", "-i", ssh_key, f"thesisadmin@{vm_ip}", command],
-        capture_output=True,
-        text=True
+    return (
+        result["return_code"],
+        result["stdout"],
+        result["stderr"]
     )
-
-    return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
 def capture_evidence():
@@ -33,7 +31,18 @@ def capture_evidence():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     evidence_file = EVIDENCE_DIR / f"cron_persistence_{timestamp}.txt"
 
-    command = f"sudo sh -c 'echo === cron evidence ===; date; echo file: {MALICIOUS_CRON}; cat {MALICIOUS_CRON}; echo; echo stat:; stat {MALICIOUS_CRON}'"
+    command = (
+        f"sudo sh -c '"
+        f"echo === cron evidence ===; "
+        f"date; "
+        f"echo file: {MALICIOUS_CRON}; "
+        f"cat {MALICIOUS_CRON}; "
+        f"echo; "
+        f"echo stat:; "
+        f"stat {MALICIOUS_CRON}"
+        f"'"
+    )
+
     code, stdout, stderr = run_ssh(command)
 
     evidence_file.write_text(stdout + "\n" + stderr, encoding="utf-8")
@@ -41,20 +50,36 @@ def capture_evidence():
 
 
 def persistence_exists():
-    code, stdout, stderr = run_ssh(f"test -f {MALICIOUS_CRON}")
-    return code == 0
+    """
+    Uses echo instead of raw test exit code.
+
+    This avoids gcloud treating 'file not found' as an SSH failure.
+    """
+    code, stdout, stderr = run_ssh(
+        f"if test -f {MALICIOUS_CRON}; then echo EXISTS; else echo MISSING; fi"
+    )
+
+    return "EXISTS" in stdout
 
 
 def remove_persistence():
-    code, stdout, stderr = run_ssh(f"sudo rm -f {MALICIOUS_CRON} {PAYLOAD_LOG}")
+    code, stdout, stderr = run_ssh(
+        f"sudo rm -f {MALICIOUS_CRON} {PAYLOAD_LOG}"
+    )
+
     return code == 0, stdout, stderr
 
 
 def validate_clean():
+    """
+    Uses echo instead of raw test exit code so clean/missing state is handled clearly.
+    """
     code, stdout, stderr = run_ssh(
-        f"test ! -f {MALICIOUS_CRON} && test ! -f {PAYLOAD_LOG}"
+        f"if test ! -f {MALICIOUS_CRON} && test ! -f {PAYLOAD_LOG}; "
+        f"then echo CLEAN; else echo NOT_CLEAN; fi"
     )
-    return code == 0
+
+    return "CLEAN" in stdout
 
 
 def log_result(status, evidence_path=""):
@@ -86,36 +111,44 @@ def log_result(status, evidence_path=""):
 
 
 def main():
-    print("[1] Checking for malicious cron persistence...")
+    print("[1] Checking for malicious cron persistence through IAP...")
 
     if not persistence_exists():
         print("[OK] No malicious cron persistence found.")
         log_result("clean_no_action")
-        return
+        return 0
 
     print("[ALERT] Malicious cron persistence found.")
 
     print("[2] Capturing evidence...")
     evidence_file, evidence_ok = capture_evidence()
-    print(f"[OK] Evidence saved to {evidence_file}")
+
+    if evidence_ok:
+        print(f"[OK] Evidence saved to {evidence_file}")
+    else:
+        print(f"[WARNING] Evidence file created, but remote evidence command had an issue: {evidence_file}")
 
     print("[3] Removing persistence...")
     removed, stdout, stderr = remove_persistence()
 
     if not removed:
         print("[ERROR] Recovery failed.")
-        print(stderr)
+        if stderr:
+            print(stderr)
         log_result("recovery_failed", evidence_file)
-        return
+        return 2
 
     print("[4] Validating clean state...")
+
     if validate_clean():
         print("[SUCCESS] Recovery validation passed.")
         log_result("recovery_validated", evidence_file)
-    else:
-        print("[WARNING] Cron file removed, but validation did not fully pass.")
-        log_result("partial_validation", evidence_file)
+        return 0
+
+    print("[WARNING] Cron file removed, but validation did not fully pass.")
+    log_result("partial_validation", evidence_file)
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

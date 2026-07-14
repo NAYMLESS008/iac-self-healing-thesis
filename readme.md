@@ -1,232 +1,148 @@
-# Terraform-Based Self-Healing VM Prototype
+# 🛡️ IaC-Based Replacement Recovery for Compromised Cloud Virtual Machines
+
+![Terraform](https://img.shields.io/badge/Terraform-IaC-623CE4?logo=terraform)
+![Python](https://img.shields.io/badge/Python-3.x-3776AB?logo=python)
+![Google Cloud](https://img.shields.io/badge/Google%20Cloud-GCP-4285F4?logo=googlecloud)
+![Wazuh](https://img.shields.io/badge/Wazuh-4.14-005571)
+
+> MSc Cybersecurity Research Project – Technological University Dublin
 
 ## Overview
 
-This MSc cybersecurity thesis prototype explores Infrastructure-as-Code (IaC) self-healing using Terraform and Python.
+This project implements an Infrastructure-as-Code (IaC) based replacement recovery workflow for cloud virtual machines that experience runtime persistence attacks.
 
-A Google Cloud Ubuntu VM is provisioned with Terraform. A runtime compromise is simulated by adding an unauthorized SSH key. The system detects the drift, restores the trusted SSH configuration, and verifies that attacker access is removed.
-
----
-
-## Components
-
-* **Terraform**: VM provisioning
-* **baseline.json**: Trusted SSH key baseline
-* **monitor.py**: Drift detection
-* **repair.py**: Baseline restoration
-* **validate.py**: Recovery validation
+The workflow uses Terraform to provision and replace cloud infrastructure, Wazuh to detect attacks, and Python controllers to automate evidence collection, recovery and validation.
 
 ---
 
-## Project Structure
+# Research Question
+
+> **How effective is an Infrastructure-as-Code (IaC)-based replacement recovery workflow at restoring a compromised cloud virtual machine following runtime persistence attacks?**
+
+---
+
+# Research Aim
+
+Design, implement and evaluate an IaC-based replacement recovery workflow capable of:
+
+- Detecting runtime persistence attacks
+- Preserving forensic evidence
+- Automatically rebuilding compromised virtual machines
+- Restoring trusted monitoring
+- Evaluating recovery using quantitative metrics
+
+---
+
+# Architecture
 
 ```text
-iac-self-healing-thesis
+                 Runtime Persistence Attack
+                           │
+                           ▼
+                   Target Cloud VM
+                    (Wazuh Agent)
+                           │
+                           ▼
+                    Wazuh Manager
+                           │
+                           ▼
+              External Python Controller
+                           │
+          ┌────────────────┴────────────────┐
+          │                                 │
+          ▼                                 ▼
+   Capture Evidence              Terraform Replace VM
+          │                                 │
+          └────────────────┬────────────────┘
+                           ▼
+                  New Target VM Created
+                           │
+                           ▼
+           Startup Script installs Wazuh Agent
+                           │
+                           ▼
+               Recovery Validation & Logging
+```
+
+---
+
+# Features
+
+- Terraform-based cloud provisioning
+- Runtime persistence detection using Wazuh
+- Automated Wazuh Agent deployment
+- Evidence capture before destructive recovery
+- Terraform replacement recovery
+- Recovery validation
+- Experimental logging
+
+---
+
+# Evaluation Metrics
+
+| Metric | Purpose |
+|---------|---------|
+| End-to-End Recovery Time | Recovery speed |
+| Recovery Effectiveness Rate | Reliability |
+| Residual Compromise Score | Remaining persistence |
+| Monitoring Restoration Time | Return to monitored state |
+| Evidence Completeness Score | Quality of evidence capture |
+
+---
+
+# Project Structure
+
+```text
+iac-self-healing-thesis/
 ├── Terraform/
 ├── controller/
-│   ├── baseline.json
-│   ├── monitor.py
-│   ├── repair.py
-│   └── validate.py
-├── attacks/
-└── readme.md
+├── evidence/
+├── results/
+└── README.md
 ```
 
 ---
 
-## MAPE-K Mapping
+# Controllers
 
-| Component | Implementation                         |
-| --------- | -------------------------------------- |
-| Monitor   | `monitor.py` reads VM SSH keys         |
-| Analyze   | Compares keys against `baseline.json`  |
-| Plan      | Restore trusted baseline               |
-| Execute   | `repair.py` replaces `authorized_keys` |
-| Knowledge | `baseline.json`                        |
-| Validate  | `validate.py` tests attacker access    |
+## wazuh_alert_check.py
+Checks Wazuh alerts before recovery.
 
----
+## cron_self_heal.py
+Prototype in-place recovery controller used during early development.
 
-## Deployment
-
-```cmd
-cd C:\iac-self-healing-thesis\Terraform
-terraform init
-terraform apply
-```
-
-Terraform creates:
-
-* Ubuntu VM
-* SSH firewall rule
-
-SSH access:
-
-```cmd
-ssh -i "%USERPROFILE%\.ssh\gcp_thesis_vm" thesisadmin@<VM_EXTERNAL_IP>
-```
+## recover_replace.py
+Performs Terraform replacement recovery.
 
 ---
 
-## Baseline Creation
+# Current Progress
 
-The trusted state is captured from:
+## Completed
 
-```bash
-~/.ssh/authorized_keys
-```
+- Terraform deployment
+- Separate Wazuh Manager
+- Automatic Wazuh Agent installation
+- Realtime File Integrity Monitoring
+- Cron persistence detection
+- Evidence capture
+- Automated Terraform replacement
+- Recovery validation
+- Experiment logging
 
-and stored in:
+## In Progress
 
-```text
-controller\baseline.json
-```
-
----
-
-## Monitoring
-
-Run:
-
-```cmd
-python controller\monitor.py
-```
-
-Expected outputs:
-
-```text
-[CLEAN] VM SSH keys match the trusted baseline.
-```
-
-or
-
-```text
-[DRIFT DETECTED] VM SSH keys do not match the baseline.
-```
+- Additional persistence attacks
+- Quantitative evaluation
+- Statistical analysis
+- Dissertation writing
 
 ---
 
-## Attack Simulation
+# Author
 
-Generate attacker key:
+**Adith Menon**
 
-```cmd
-ssh-keygen -t ed25519 -f attacks\attacker_key -C "simulated-attacker-key"
-```
+MSc Computing (Applied Cyber Security)
 
-Inject attacker key:
-
-```cmd
-type attacks\attacker_key.pub | ssh -i "%USERPROFILE%\.ssh\gcp_thesis_vm" thesisadmin@<VM_EXTERNAL_IP> "cat >> ~/.ssh/authorized_keys"
-```
-
-Monitor output:
-
-```text
-[DRIFT DETECTED] VM SSH keys do not match the baseline.
-```
-
----
-
-## Repair
-
-Run:
-
-```cmd
-python controller\repair.py
-```
-
-Expected output:
-
-```text
-[REPAIR COMPLETE] authorized_keys has been restored to the trusted baseline.
-```
-
-Verify:
-
-```cmd
-python controller\monitor.py
-```
-
-Output:
-
-```text
-[CLEAN] VM SSH keys match the trusted baseline.
-```
-
----
-
-## Validation
-
-Test attacker access:
-
-```cmd
-ssh -i attacks\attacker_key -o BatchMode=yes thesisadmin@<VM_EXTERNAL_IP>
-```
-
-Expected result:
-
-```text
-Permission denied (publickey).
-```
-
-Or run:
-
-```cmd
-python controller\validate.py
-```
-
-Expected output:
-
-```text
-[VALIDATION PASSED]
-[SECURITY RESTORED]
-```
-
----
-
-## Experiment Flow
-
-```text
-Deploy VM
-    ↓
-Create baseline
-    ↓
-Monitor (clean)
-    ↓
-Inject attacker key
-    ↓
-Monitor (drift detected)
-    ↓
-Repair
-    ↓
-Monitor (clean)
-    ↓
-Validate attacker access denied
-```
-
----
-
-## Limitations
-
-* Only SSH-key persistence is tested
-* Attack injection is manual
-* Single VM environment
-* Repair is in-place rather than full rebuild
-* Scripts are manually executed
-
----
-
-## Future Work
-
-* Automated controller workflow
-* Additional persistence checks (cron jobs, users)
-* Firewall and configuration drift detection
-* Recovery timing measurements
-* Comparison with full VM rebuild strategies
-
----
-
-## Summary
-
-The prototype demonstrates a simple self-healing workflow: provision a VM with Terraform, detect unauthorized SSH-key persistence, restore the trusted baseline, and verify that attacker access is removed.
+Technological University Dublin
