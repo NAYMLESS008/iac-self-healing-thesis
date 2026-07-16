@@ -57,7 +57,8 @@ resource "google_compute_instance" "vm" {
 
   # Trusted SSH key added during VM creation
   metadata = {
-    ssh-keys = "${var.ssh_user}:${file(var.public_key_path)}"
+    block-project-ssh-keys = "true"
+    ssh-keys               = "${var.ssh_user}:${file(var.public_key_path)}"
 
     startup-script = <<-EOT
       #!/bin/bash
@@ -84,4 +85,5 @@ resource "google_compute_instance" "vm" {
     role    = "self-healing-test"
   }
 }
+
 
