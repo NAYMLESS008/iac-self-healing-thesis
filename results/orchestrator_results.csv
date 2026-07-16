@@ -1,3 +1,4 @@
 timestamp_utc,attack_type,detection_status,detection_duration_seconds,recovery_strategy,recovery_duration_seconds,recovery_success,validation_success,total_workflow_duration_seconds,error_message
 2026-07-09T19:24:09.479952+00:00,cron_persistence,not_detected,12.42,none,0,False,False,12.42,No active recoverable cron persistence found.
 2026-07-09T19:25:16.819246+00:00,cron_persistence,detected,20.08,in_place_repair,38.18,True,True,58.26,
+2026-07-09T19:47:46.844001+00:00,cron_persistence,not_detected,27.05,not_captured,0,none,0,False,False,27.05,No active recoverable cron persistence found.
