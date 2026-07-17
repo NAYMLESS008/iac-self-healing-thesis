@@ -1,2 +1,5 @@
 timestamp,experiment,new_key_success,old_key_denied,residual_compromise_score,final_result,evidence_file
 2026-07-16 19:56:11,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260716_195611.txt
+2026-07-16 22:27:28,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260716_222728.txt
+2026-07-16 23:34:53,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260716_233453.txt
+2026-07-17 00:42:28,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260717_004228.txt

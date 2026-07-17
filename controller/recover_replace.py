@@ -2,7 +2,7 @@
 import time
 from pathlib import Path
 
-from iap_helpers import run_target_command
+from controller.iap_helpers import run_target_command
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -51,7 +51,7 @@ def wait_for_target_iap(max_attempts=12, wait_seconds=10):
     for attempt in range(1, max_attempts + 1):
         print(f"[CHECK] IAP reachability attempt {attempt}/{max_attempts}...")
 
-        result = run_target_command("hostname", timeout=60)
+        result = run_target_command("hostname", timeout=180)
 
         if result["success"] and "thesis-self-healing-vm" in result["stdout"]:
             print("[OK] Replacement target VM is reachable through IAP.")

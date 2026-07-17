@@ -13,23 +13,6 @@ TARGET_VM = "thesis-self-healing-vm"
 
 
 def run_iap_command(vm_name, remote_command, timeout=120):
-    """
-    Runs a command on a Google Cloud VM through IAP.
-
-    This uses the full gcloud.cmd path because Python subprocess on Windows
-    may not find gcloud from PATH.
-    """
-
-    if not Path(GCLOUD_CMD).exists():
-        return {
-            "success": False,
-            "return_code": -1,
-            "stdout": "",
-            "stderr": f"gcloud.cmd not found at: {GCLOUD_CMD}",
-            "duration_seconds": 0,
-            "command": GCLOUD_CMD,
-        }
-
     command = [
         GCLOUD_CMD,
         "compute",
@@ -41,25 +24,38 @@ def run_iap_command(vm_name, remote_command, timeout=120):
         f"--command={remote_command}",
     ]
 
-    start_time = time.time()
+    try:
+        start_time = time.time()
 
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=timeout
-    )
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
 
-    duration = round(time.time() - start_time, 2)
+        duration = round(time.time() - start_time, 2)
 
-    return {
-        "success": result.returncode == 0,
-        "return_code": result.returncode,
-        "stdout": result.stdout.strip(),
-        "stderr": result.stderr.strip(),
-        "duration_seconds": duration,
-        "command": " ".join(command),
-    }
+        return {
+            "success": result.returncode == 0,
+            "return_code": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "duration": duration,
+            "timed_out": False,
+        }
+
+    except subprocess.TimeoutExpired as e:
+        duration = round(timeout, 2)
+
+        return {
+            "success": False,
+            "return_code": 124,
+            "stdout": e.stdout or "",
+            "stderr": f"IAP command timed out after {timeout} seconds",
+            "duration": duration,
+            "timed_out": True,
+        }
 
 
 def run_wazuh_command(remote_command, timeout=120):

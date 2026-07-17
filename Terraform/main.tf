@@ -71,6 +71,17 @@ resource "google_compute_instance" "vm" {
 
             sed -i 's|<directories>/etc,/usr/bin,/usr/sbin</directories>|<directories check_all="yes" realtime="yes" report_changes="yes">/etc,/usr/bin,/usr/sbin</directories>|' /var/ossec/etc/ossec.conf
 
+      for i in $(seq 1 30); do
+        if [ -f /home/${var.ssh_user}/.ssh/authorized_keys ]; then
+          break
+        fi
+        sleep 2
+      done
+
+      if [ -f /home/${var.ssh_user}/.ssh/authorized_keys ]; then
+        grep -q "/home/${var.ssh_user}/.ssh/authorized_keys" /var/ossec/etc/ossec.conf || sed -i '/<\/syscheck>/i\    <directories check_all="yes" realtime="yes" report_changes="yes">/home/${var.ssh_user}/.ssh/authorized_keys</directories>' /var/ossec/etc/ossec.conf
+      fi
+
       systemctl daemon-reload
       systemctl enable wazuh-agent
       systemctl start wazuh-agent
