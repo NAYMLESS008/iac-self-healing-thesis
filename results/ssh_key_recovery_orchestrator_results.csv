@@ -1,6 +1,6 @@
-timestamp,scenario,wazuh_detection,evidence_capture,quarantine,replacement_recovery,post_recovery_validation,residual_compromise_score,total_duration_seconds,final_result
-2026-07-16T23:07:28,ssh_key_persistence,FAIL,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,UNKNOWN,10.29,NO_RECOVERY_TRIGGERED
-2026-07-16T23:10:53,ssh_key_persistence,FAIL,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,UNKNOWN,10.22,NO_RECOVERY_TRIGGERED
-2026-07-16T23:35:04,ssh_key_persistence,PASS,PASS,PASS,FAIL,PASS,UNKNOWN,257.36,FAIL
+﻿timestamp,scenario,wazuh_detection,evidence_capture,quarantine,stale_agent_cleanup,replacement_recovery,post_recovery_validation,residual_compromise_score,total_duration_seconds,final_result
+2026-07-16T23:07:28,ssh_key_persistence,FAIL,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,UNKNOWN,10.29,NO_RECOVERY_TRIGGERED
+2026-07-16T23:10:53,ssh_key_persistence,FAIL,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,UNKNOWN,10.22,NO_RECOVERY_TRIGGERED
+2026-07-16T23:35:04,ssh_key_persistence,PASS,PASS,PASS,NOT_RECORDED,FAIL,PASS,UNKNOWN,257.36,FAIL
 2026-07-17T00:12:05,ssh_key_persistence,FAIL,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,UNKNOWN,13.75,NO_RECOVERY_TRIGGERED
 2026-07-17T00:33:29,ssh_key_persistence,PASS,PASS,PASS,PASS,PASS,PASS,0,551.78,PASS
