@@ -52,7 +52,12 @@ def target_persistence_exists():
 
 
 def fresh_wazuh_alert_exists():
-    remote_command = "sudo tail -n 500 /var/ossec/logs/alerts/alerts.json || true"
+    remote_command = (
+        "sudo grep -F "
+        "'/etc/cron.d/realtime_evil_persistence' "
+        "/var/ossec/logs/alerts/alerts.json "
+        "| tail -n 100 || true"
+    )
 
     result = run_wazuh_command(remote_command)
 
@@ -86,7 +91,7 @@ def fresh_wazuh_alert_exists():
         if (
             agent_name == TARGET_AGENT_NAME
             and path == ATTACK_PATH
-            and event == "added"
+            and event in {"added", "modified"}
             and "syscheck" in groups
             and is_recent_alert(alert_time)
         ):
@@ -165,3 +170,5 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
