@@ -145,6 +145,13 @@ def main():
 
     row["replacement_recovery"] = "PASS" if replacement["success"] else "FAIL"
 
+    if not replacement["success"]:
+        return stop_and_log(
+            "FAILED_REPLACEMENT_RECOVERY",
+            row,
+            workflow_start
+        )
+
     validation = run_step(
         "Post-recovery SSH key validation",
         [sys.executable, "-m", "controller.validate_ssh_key_rotation"]
@@ -178,3 +185,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
