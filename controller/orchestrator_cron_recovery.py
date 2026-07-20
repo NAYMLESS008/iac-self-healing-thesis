@@ -1,4 +1,5 @@
-﻿import csv
+﻿from controller.alert_state import mark_selected_alert_processed
+import csv
 import subprocess
 import sys
 import time
@@ -283,3 +284,4 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

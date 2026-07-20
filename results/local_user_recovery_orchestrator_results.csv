@@ -1,0 +1,2 @@
+timestamp_utc,scenario,wazuh_detection,detection_check_duration_seconds,evidence_capture,evidence_capture_duration_seconds,quarantine,quarantine_duration_seconds,stale_agent_cleanup,stale_agent_cleanup_duration_seconds,replacement_recovery,replacement_duration_seconds,post_recovery_validation,validation_duration_seconds,monitoring_restored,residual_compromise_count,residual_compromise_score,total_duration_seconds,final_result
+2026-07-20T20:27:49+00:00,unauthorized_local_user,PASS,26.5,PASS,66.75,PASS,73.59,PASS,50.71,PASS,85.81,PASS,29.49,PASS,0/3,0,332.87,PASS
