@@ -15,14 +15,85 @@ ALERTS_FILE = "/var/ossec/logs/alerts/alerts.json"
 
 SCENARIO = "stolen_trusted_ssh_key"
 COMPROMISED_RULE_ID = "100002"
-COMPROMISED_FINGERPRINT = (
-    "SHA256:3NIUXcpdz4kxlntOVMvxRk3HPRYKMzhJGg7HQkQa1Wo"
-)
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ROTATION_STATE_FILE = (
     PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 )
+
+
+def get_compromised_fingerprint():
+    """
+    Calculate the fingerprint of the SSH key currently trusted
+    before the recovery workflow rotates it.
+    """
+    if not ROTATION_STATE_FILE.exists():
+        raise FileNotFoundError(
+            f"Rotation state not found: {ROTATION_STATE_FILE}"
+        )
+
+    try:
+        state = json.loads(
+            ROTATION_STATE_FILE.read_text(encoding="utf-8")
+        )
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Invalid rotation state JSON: "
+            f"{ROTATION_STATE_FILE}"
+        ) from exc
+
+    public_key_value = state.get("new_public_key")
+
+    if not public_key_value:
+        raise KeyError(
+            "new_public_key is missing from rotation state."
+        )
+
+    public_key = Path(public_key_value)
+
+    if not public_key.exists():
+        raise FileNotFoundError(
+            f"Current trusted public key not found: "
+            f"{public_key}"
+        )
+
+    result = subprocess.run(
+        [
+            "ssh-keygen",
+            "-lf",
+            str(public_key),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Could not calculate current trusted key "
+            f"fingerprint: {result.stderr.strip()}"
+        )
+
+    parts = result.stdout.strip().split()
+
+    fingerprint = next(
+        (
+            part
+            for part in parts
+            if part.startswith("SHA256:")
+        ),
+        None,
+    )
+
+    if not fingerprint:
+        raise RuntimeError(
+            "ssh-keygen output did not contain a "
+            "SHA256 fingerprint."
+        )
+
+    return fingerprint
+
+
+COMPROMISED_FINGERPRINT = get_compromised_fingerprint()
 
 PROJECT_ID = "project-207ee30d-2273-45b0-8a0"
 ZONE = "europe-west1-b"
