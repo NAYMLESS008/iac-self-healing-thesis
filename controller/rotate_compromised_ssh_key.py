@@ -10,9 +10,51 @@ TFVARS_FILE = PROJECT_ROOT / "Terraform" / "terraform.tfvars"
 SSH_DIR = Path.home() / ".ssh"
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 
-CURRENT_PRIVATE_KEY = (
+INITIAL_PRIVATE_KEY = (
     SSH_DIR / "gcp_thesis_vm_rotated_run1_new"
 )
+
+
+def get_current_private_key():
+    """
+    Return the private key currently trusted by Terraform.
+
+    After the first rotation, the latest trusted key is stored
+    in ssh_rotation_state.json as new_private_key.
+    """
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(
+                STATE_FILE.read_text(encoding="utf-8")
+            )
+
+            stored_key = state.get("new_private_key")
+
+            if stored_key:
+                current_key = Path(stored_key)
+
+                if current_key.exists():
+                    print(
+                        "[INFO] Current trusted key loaded "
+                        f"from rotation state: {current_key}"
+                    )
+                    return current_key
+
+                raise FileNotFoundError(
+                    "Trusted key recorded in rotation state "
+                    f"does not exist: {current_key}"
+                )
+
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Invalid rotation state JSON: {STATE_FILE}"
+            ) from exc
+
+    print(
+        "[INFO] No previous rotation state found; "
+        f"using initial key: {INITIAL_PRIVATE_KEY}"
+    )
+    return INITIAL_PRIVATE_KEY
 
 
 def run_command(command):
@@ -40,14 +82,16 @@ def preserve_compromised_key(timestamp):
         f"{compromised_private}.pub"
     )
 
+    current_private_key = get_current_private_key()
+
     current_public = Path(
-        f"{CURRENT_PRIVATE_KEY}.pub"
+        f"{current_private_key}.pub"
     )
 
-    if not CURRENT_PRIVATE_KEY.exists():
+    if not current_private_key.exists():
         raise FileNotFoundError(
             f"Current private key not found: "
-            f"{CURRENT_PRIVATE_KEY}"
+            f"{current_private_key}"
         )
 
     if not current_public.exists():
@@ -57,7 +101,7 @@ def preserve_compromised_key(timestamp):
         )
 
     shutil.copy2(
-        CURRENT_PRIVATE_KEY,
+        current_private_key,
         compromised_private,
     )
     shutil.copy2(
