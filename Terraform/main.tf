@@ -82,6 +82,30 @@ resource "google_compute_instance" "vm" {
         grep -q "/home/${var.ssh_user}/.ssh/authorized_keys" /var/ossec/etc/ossec.conf || sed -i '/<\/syscheck>/i\    <directories check_all="yes" realtime="yes" report_changes="yes">/home/${var.ssh_user}/.ssh/authorized_keys</directories>' /var/ossec/etc/ossec.conf
       fi
 
+      echo "[STARTUP] Configuring Wazuh auth-log collection" >> /var/log/thesis-startup.log
+
+      if ! grep -q '<location>/var/log/auth.log</location>' /var/ossec/etc/ossec.conf; then
+        cat >> /var/ossec/etc/ossec.conf <<'WAZUH_AUTH_LOG'
+<ossec_config>
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+</ossec_config>
+WAZUH_AUTH_LOG
+      fi
+
+      echo "[STARTUP] Enabling verbose SSH authentication logging" >> /var/log/thesis-startup.log
+
+      if grep -qE '^[[:space:]]*LogLevel[[:space:]]+' /etc/ssh/sshd_config; then
+        sed -i 's/^[[:space:]]*LogLevel[[:space:]].*/LogLevel VERBOSE/' /etc/ssh/sshd_config
+      else
+        echo 'LogLevel VERBOSE' >> /etc/ssh/sshd_config
+      fi
+
+      sshd -t
+      systemctl restart ssh
+
       systemctl daemon-reload
       systemctl enable wazuh-agent
       systemctl start wazuh-agent

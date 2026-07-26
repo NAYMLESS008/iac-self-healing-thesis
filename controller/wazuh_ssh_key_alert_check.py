@@ -1,6 +1,7 @@
 ﻿import json
 import subprocess
-import sys
+import time
+from pathlib import Path
 
 from controller.alert_state import (
     is_alert_processed,
@@ -10,44 +11,132 @@ from controller.iap_helpers import run_wazuh_command
 
 
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
-AUTHORIZED_KEYS_PATH = "/home/thesisadmin/.ssh/authorized_keys"
 ALERTS_FILE = "/var/ossec/logs/alerts/alerts.json"
-SCENARIO = "ssh_key_persistence"
+
+SCENARIO = "stolen_trusted_ssh_key"
+COMPROMISED_RULE_ID = "100002"
+COMPROMISED_FINGERPRINT = (
+    "SHA256:3NIUXcpdz4kxlntOVMvxRk3HPRYKMzhJGg7HQkQa1Wo"
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ROTATION_STATE_FILE = (
+    PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
+)
+
+PROJECT_ID = "project-207ee30d-2273-45b0-8a0"
+ZONE = "europe-west1-b"
+TARGET_HOST = "thesis-self-healing-vm"
+
+EXPECTED_USER = "thesisadmin"
+EXPECTED_HOSTNAME = "thesis-self-healing-vm"
 
 
-def old_key_is_active():
+def get_compromised_private_key():
+    if not ROTATION_STATE_FILE.exists():
+        raise FileNotFoundError(
+            f"Rotation state not found: {ROTATION_STATE_FILE}"
+        )
+
+    state = json.loads(
+        ROTATION_STATE_FILE.read_text(encoding="utf-8")
+    )
+
+    # Before the next rotation, the previous run's new key is
+    # the currently trusted key now considered compromised.
+    key_path = state.get("new_private_key")
+
+    if not key_path:
+        raise ValueError(
+            "new_private_key is missing from rotation state."
+        )
+
+    private_key = Path(key_path)
+
+    if not private_key.exists():
+        raise FileNotFoundError(
+            f"Compromised private key not found: {private_key}"
+        )
+
+    return private_key
+
+
+def compromised_key_is_active():
+    try:
+        compromised_private_key = (
+            get_compromised_private_key()
+        )
+    except Exception as exc:
+        print(f"[ERROR] {exc}")
+        return False
+
+    proxy_command = (
+        "gcloud.cmd compute start-iap-tunnel "
+        f"{TARGET_HOST} %p "
+        "--listen-on-stdin "
+        f"--zone={ZONE} "
+        f"--project={PROJECT_ID}"
+    )
+
     result = subprocess.run(
         [
             "ssh",
             "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=10",
-            "thesis-target-old-compromised-key",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "ConnectTimeout=15",
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-i", str(compromised_private_key),
+            "-o", f"ProxyCommand={proxy_command}",
+            f"{EXPECTED_USER}@{TARGET_HOST}",
             "whoami && hostname",
         ],
         capture_output=True,
         text=True,
+        timeout=120,
     )
+
+    if result.stdout:
+        print(result.stdout.strip())
+
+    if result.stderr:
+        print(result.stderr.strip())
 
     return (
         result.returncode == 0
-        and "thesisadmin" in result.stdout
+        and EXPECTED_USER in result.stdout
+        and EXPECTED_HOSTNAME in result.stdout
     )
 
 
-def unprocessed_ssh_alert_exists():
+def get_matching_alerts():
     command = (
-        "sudo grep -F "
-        f"'{AUTHORIZED_KEYS_PATH}' "
-        f"{ALERTS_FILE} "
-        "| tail -n 100 || true"
+        f"sudo tail -n 500 {ALERTS_FILE} "
+        f"| grep -F '\"id\":\"{COMPROMISED_RULE_ID}\"' "
+        "|| true"
     )
 
-    result = run_wazuh_command(command)
+    result = None
 
-    if not result["success"]:
+    for attempt in range(1, 4):
+        result = run_wazuh_command(command)
+
+        if result["success"]:
+            break
+
+        print(
+            f"[WARN] Wazuh alert read attempt "
+            f"{attempt}/3 failed."
+        )
+
+        if result["stderr"].strip():
+            print(result["stderr"].strip())
+
+        if attempt < 3:
+            time.sleep(5)
+
+    if not result or not result["success"]:
         print("[ERROR] Could not read Wazuh alerts.")
-        print(result["stderr"])
-        return False
+        return []
 
     matching_alerts = []
 
@@ -57,26 +146,37 @@ def unprocessed_ssh_alert_exists():
         except json.JSONDecodeError:
             continue
 
+        rule_id = str(
+            alert.get("rule", {}).get("id", "")
+        )
+
+        agent_name = alert.get(
+            "agent", {}
+        ).get("name")
+
+        location = alert.get("location", "")
+        full_log = alert.get("full_log", "")
         alert_id = str(alert.get("id", ""))
-        agent_name = alert.get("agent", {}).get("name")
-        syscheck = alert.get("syscheck", {})
-        path = syscheck.get("path")
-        event = syscheck.get("event")
-        groups = alert.get("rule", {}).get("groups", [])
 
         if (
             alert_id
+            and rule_id == COMPROMISED_RULE_ID
             and agent_name == TARGET_AGENT_NAME
-            and path == AUTHORIZED_KEYS_PATH
-            and event in {"added", "modified"}
-            and "syscheck" in groups
+            and location == "/var/log/auth.log"
+            and COMPROMISED_FINGERPRINT in full_log
         ):
             matching_alerts.append(alert)
 
+    return matching_alerts
+
+
+def unprocessed_compromised_key_alert_exists():
+    matching_alerts = get_matching_alerts()
+
     if not matching_alerts:
         print(
-            "[RESULT] No matching Wazuh authorized_keys "
-            "alert found."
+            "[RESULT] No matching compromised-key "
+            "authentication alert found."
         )
         return False
 
@@ -85,47 +185,56 @@ def unprocessed_ssh_alert_exists():
 
     if is_alert_processed(SCENARIO, alert_id):
         print(
-            f"[ALREADY PROCESSED] SSH alert ID {alert_id} "
+            f"[ALREADY PROCESSED] Alert {alert_id} "
             "has already completed recovery."
         )
         return False
 
     save_selected_alert(SCENARIO, alert_id)
 
-    print("[UNPROCESSED SSH-KEY ALERT FOUND]")
+    print("[UNPROCESSED COMPROMISED-KEY ALERT FOUND]")
     print(f"[ALERT ID] {alert_id}")
     print(
         "[RULE]",
         latest_alert.get("rule", {}).get("id"),
         "-",
-        latest_alert.get("rule", {}).get("description"),
+        latest_alert.get("rule", {}).get(
+            "description"
+        ),
+    )
+    print(
+        "[FINGERPRINT]",
+        COMPROMISED_FINGERPRINT
     )
     print(json.dumps(latest_alert))
+
     return True
 
 
 def main():
     print(
-        "[INFO] Checking Wazuh for an unprocessed "
-        "authorized_keys alert..."
+        "[INFO] Checking Wazuh for use of the "
+        "known compromised SSH key..."
     )
 
-    if not unprocessed_ssh_alert_exists():
+    if not unprocessed_compromised_key_alert_exists():
         return 1
 
-    if old_key_is_active():
+    if compromised_key_is_active():
         print(
-            "[CONFIRMED] Old compromised SSH key is "
-            "currently active."
+            "[CONFIRMED] The compromised trusted "
+            "private key still authenticates."
         )
         return 0
 
     print(
-        "[RESULT] An unprocessed alert exists, but the old "
-        "compromised key is not active."
+        "[RESULT] Wazuh detected compromised-key use, "
+        "but the key no longer authenticates."
     )
     return 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+

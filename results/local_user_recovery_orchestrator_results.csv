@@ -1,2 +1,7 @@
 timestamp_utc,scenario,wazuh_detection,detection_check_duration_seconds,evidence_capture,evidence_capture_duration_seconds,quarantine,quarantine_duration_seconds,stale_agent_cleanup,stale_agent_cleanup_duration_seconds,replacement_recovery,replacement_duration_seconds,post_recovery_validation,validation_duration_seconds,monitoring_restored,residual_compromise_count,residual_compromise_score,total_duration_seconds,final_result
 2026-07-20T20:27:49+00:00,unauthorized_local_user,PASS,26.5,PASS,66.75,PASS,73.59,PASS,50.71,PASS,85.81,PASS,29.49,PASS,0/3,0,332.87,PASS
+2026-07-20T20:55:53+00:00,unauthorized_local_user,PASS,28.44,PASS,66.16,PASS,69.3,PASS,63.99,FAIL,90.05,NOT_RUN,,NOT_RUN,UNKNOWN,UNKNOWN,317.93,FAILED_REPLACEMENT_RECOVERY
+2026-07-20T21:09:53+00:00,unauthorized_local_user,PASS,33.6,PASS,95.75,PASS,66.48,PASS,82.73,PASS,97.01,PASS,44.86,PASS,0/3,0,420.45,PASS
+2026-07-20T21:21:09+00:00,unauthorized_local_user,PASS,48.99,PASS,105.31,PASS,75.23,PASS,97.71,PASS,141.71,PASS,39.74,PASS,0/3,0,508.73,PASS
+2026-07-20T21:31:04+00:00,unauthorized_local_user,PASS,34.83,PASS,109.06,PASS,79.87,PASS,95.97,PASS,118.41,PASS,40.59,PASS,0/3,0,478.76,PASS
+2026-07-20T21:44:11+00:00,unauthorized_local_user,PASS,33.26,PASS,100.85,PASS,77.25,PASS,65.68,PASS,142.48,PASS,35.14,PASS,0/3,0,454.68,PASS

@@ -1,0 +1,5 @@
+{
+  "compromised_private_key": "C:\\Users\\nayml\\.ssh\\gcp_thesis_vm_compromised_20260726_193848",
+  "new_private_key": "C:\\Users\\nayml\\.ssh\\gcp_thesis_vm_rotated_20260726_193848",
+  "new_public_key": "C:\\Users\\nayml\\.ssh\\gcp_thesis_vm_rotated_20260726_193848.pub"
+}

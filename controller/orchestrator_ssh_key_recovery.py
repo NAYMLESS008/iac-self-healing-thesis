@@ -2,68 +2,118 @@
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+from controller.alert_state import mark_selected_alert_processed
 
 
 RESULTS_DIR = Path("results")
-RESULTS_FILE = RESULTS_DIR / "ssh_key_recovery_orchestrator_results.csv"
+RESULTS_FILE = (
+    RESULTS_DIR / "ssh_key_recovery_orchestrator_results.csv"
+)
+
+SCENARIO = "stolen_trusted_ssh_key"
+
+FIELDNAMES = [
+    "timestamp_utc",
+    "scenario",
+    "wazuh_detection",
+    "detection_check_duration_seconds",
+    "evidence_capture",
+    "evidence_capture_duration_seconds",
+    "quarantine",
+    "quarantine_duration_seconds",
+    "stale_agent_cleanup",
+    "stale_agent_cleanup_duration_seconds",
+    "credential_rotation",
+    "credential_rotation_duration_seconds",
+    "replacement_recovery",
+    "replacement_duration_seconds",
+    "post_recovery_validation",
+    "validation_duration_seconds",
+    "monitoring_restored",
+    "new_key_success",
+    "old_key_denied",
+    "residual_compromise_count",
+    "residual_compromise_score",
+    "total_duration_seconds",
+    "final_result",
+]
 
 
-def run_step(name, command):
-    print(f"\n[STEP] {name}")
-    start = time.time()
+def run_step(description, module_name):
+    print(f"\n[STEP] {description}")
+
+    start = time.perf_counter()
 
     result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True
+        [sys.executable, "-m", module_name],
+        text=True,
     )
 
-    duration = round(time.time() - start, 2)
-
-    print(result.stdout)
-
-    if result.stderr:
-        print("[STDERR]")
-        print(result.stderr)
+    duration = round(
+        time.perf_counter() - start,
+        2,
+    )
 
     if result.returncode == 0:
-        print(f"[OK] {name} completed in {duration} seconds.")
+        print(
+            f"[OK] {description} completed in "
+            f"{duration} seconds."
+        )
     else:
-        print(f"[FAIL] {name} failed in {duration} seconds.")
+        print(
+            f"[FAIL] {description} failed in "
+            f"{duration} seconds."
+        )
 
+    return result.returncode == 0, duration
+
+
+def create_result_row():
     return {
-        "name": name,
-        "success": result.returncode == 0,
-        "return_code": result.returncode,
-        "duration": duration,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
+        "timestamp_utc": datetime.now(
+            timezone.utc
+        ).isoformat(timespec="seconds"),
+        "scenario": SCENARIO,
+        "wazuh_detection": "NOT_RUN",
+        "detection_check_duration_seconds": "",
+        "evidence_capture": "NOT_RUN",
+        "evidence_capture_duration_seconds": "",
+        "quarantine": "NOT_RUN",
+        "quarantine_duration_seconds": "",
+        "stale_agent_cleanup": "NOT_RUN",
+        "stale_agent_cleanup_duration_seconds": "",
+        "credential_rotation": "NOT_RUN",
+        "credential_rotation_duration_seconds": "",
+        "replacement_recovery": "NOT_RUN",
+        "replacement_duration_seconds": "",
+        "post_recovery_validation": "NOT_RUN",
+        "validation_duration_seconds": "",
+        "monitoring_restored": "NOT_RUN",
+        "new_key_success": "UNKNOWN",
+        "old_key_denied": "UNKNOWN",
+        "residual_compromise_count": "UNKNOWN",
+        "residual_compromise_score": "UNKNOWN",
+        "total_duration_seconds": "",
+        "final_result": "NOT_COMPLETED",
     }
 
 
-def log_result(row):
+def write_result(row):
     RESULTS_DIR.mkdir(exist_ok=True)
 
     file_exists = RESULTS_FILE.exists()
 
-    with RESULTS_FILE.open("a", newline="", encoding="utf-8") as f:
+    with RESULTS_FILE.open(
+        "a",
+        newline="",
+        encoding="utf-8",
+    ) as csv_file:
         writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                "timestamp",
-                "scenario",
-                "wazuh_detection",
-                "evidence_capture",
-                "quarantine",
-                "stale_agent_cleanup",
-                "replacement_recovery",
-                "post_recovery_validation",
-                "residual_compromise_score",
-                "total_duration_seconds",
-                "final_result",
-            ]
+            csv_file,
+            fieldnames=FIELDNAMES,
         )
 
         if not file_exists:
@@ -72,117 +122,237 @@ def log_result(row):
         writer.writerow(row)
 
 
-def stop_and_log(reason, row, workflow_start):
-    row["total_duration_seconds"] = round(time.time() - workflow_start, 2)
-    row["final_result"] = reason
-    log_result(row)
-    print(f"[STOP] {reason}")
+def stop_and_log(
+    result_name,
+    row,
+    workflow_start,
+):
+    total_duration = round(
+        time.perf_counter() - workflow_start,
+        2,
+    )
+
+    row["total_duration_seconds"] = (
+        total_duration
+    )
+    row["final_result"] = result_name
+
+    write_result(row)
+
+    print(f"\n[STOP] {result_name}")
+    print(
+        "[METRIC] total_duration_seconds = "
+        f"{total_duration}"
+    )
+
     return 1
 
 
 def main():
-    print("[START] SSH key persistence recovery orchestrator")
-    workflow_start = time.time()
+    print("================================================")
+    print(" Starting stolen SSH-key recovery workflow ")
+    print("================================================")
 
-    row = {
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
-        "scenario": "ssh_key_persistence",
-        "wazuh_detection": "NOT_RUN",
-        "evidence_capture": "NOT_RUN",
-        "quarantine": "NOT_RUN",
-        "stale_agent_cleanup": "NOT_RUN",
-        "replacement_recovery": "NOT_RUN",
-        "post_recovery_validation": "NOT_RUN",
-        "residual_compromise_score": "UNKNOWN",
-        "total_duration_seconds": "",
-        "final_result": "",
-    }
+    workflow_start = time.perf_counter()
+    row = create_result_row()
 
-    detection = run_step(
-        "Wazuh detection and active old-key confirmation",
-        [sys.executable, "-m", "controller.wazuh_ssh_key_alert_check"]
+    success, duration = run_step(
+        "Wazuh detection and compromised-key confirmation",
+        "controller.wazuh_ssh_key_alert_check",
     )
 
-    row["wazuh_detection"] = "PASS" if detection["success"] else "FAIL"
+    row["wazuh_detection"] = (
+        "PASS" if success else "FAIL"
+    )
+    row["detection_check_duration_seconds"] = (
+        duration
+    )
 
-    if not detection["success"]:
-        return stop_and_log("NO_RECOVERY_TRIGGERED", row, workflow_start)
+    if not success:
+        return stop_and_log(
+            "NO_RECOVERY_TRIGGERED",
+            row,
+            workflow_start,
+        )
 
-    evidence = run_step(
+    success, duration = run_step(
         "Evidence capture before replacement",
-        [sys.executable, "-m", "controller.capture_ssh_key_evidence"]
+        "controller.capture_ssh_key_evidence",
     )
 
-    row["evidence_capture"] = "PASS" if evidence["success"] else "FAIL"
+    row["evidence_capture"] = (
+        "PASS" if success else "FAIL"
+    )
+    row["evidence_capture_duration_seconds"] = (
+        duration
+    )
 
-    if not evidence["success"]:
-        return stop_and_log("FAILED_EVIDENCE_CAPTURE", row, workflow_start)
+    if not success:
+        return stop_and_log(
+            "FAILED_EVIDENCE_CAPTURE",
+            row,
+            workflow_start,
+        )
 
-    quarantine = run_step(
+    success, duration = run_step(
         "Quarantine compromised target VM",
-        [sys.executable, "-m", "controller.quarantine_target"]
+        "controller.quarantine_target",
     )
 
-    row["quarantine"] = "PASS" if quarantine["success"] else "FAIL"
-
-    if not quarantine["success"]:
-        return stop_and_log("FAILED_QUARANTINE", row, workflow_start)
-
-    cleanup = run_step(
-        "Remove stale Wazuh agent entry",
-        [sys.executable, "-m", "controller.remove_stale_wazuh_agent"]
+    row["quarantine"] = (
+        "PASS" if success else "FAIL"
+    )
+    row["quarantine_duration_seconds"] = (
+        duration
     )
 
-    row["stale_agent_cleanup"] = "PASS" if cleanup["success"] else "FAIL"
+    if not success:
+        return stop_and_log(
+            "FAILED_QUARANTINE",
+            row,
+            workflow_start,
+        )
 
-    if not cleanup["success"]:
-        return stop_and_log("FAILED_STALE_AGENT_CLEANUP", row, workflow_start)
+    success, duration = run_step(
+        "Remove stale Wazuh agent registration",
+        "controller.remove_stale_wazuh_agent",
+    )
 
-    replacement = run_step(
+    row["stale_agent_cleanup"] = (
+        "PASS" if success else "FAIL"
+    )
+    row[
+        "stale_agent_cleanup_duration_seconds"
+    ] = duration
+
+    if not success:
+        return stop_and_log(
+            "FAILED_STALE_AGENT_CLEANUP",
+            row,
+            workflow_start,
+        )
+
+    success, duration = run_step(
+        "Generate and register replacement SSH key",
+        "controller.rotate_compromised_ssh_key",
+    )
+
+    row["credential_rotation"] = (
+        "PASS" if success else "FAIL"
+    )
+    row[
+        "credential_rotation_duration_seconds"
+    ] = duration
+
+    if not success:
+        return stop_and_log(
+            "FAILED_CREDENTIAL_ROTATION",
+            row,
+            workflow_start,
+        )
+
+    success, duration = run_step(
         "Terraform replacement recovery",
-        [sys.executable, "-m", "controller.recover_replace"]
+        "controller.recover_replace",
     )
 
-    row["replacement_recovery"] = "PASS" if replacement["success"] else "FAIL"
+    row["replacement_recovery"] = (
+        "PASS" if success else "FAIL"
+    )
+    row["replacement_duration_seconds"] = (
+        duration
+    )
 
-    if not replacement["success"]:
+    if not success:
         return stop_and_log(
             "FAILED_REPLACEMENT_RECOVERY",
             row,
-            workflow_start
+            workflow_start,
         )
 
-    validation = run_step(
-        "Post-recovery SSH key validation",
-        [sys.executable, "-m", "controller.validate_ssh_key_rotation"]
+    success, duration = run_step(
+        "Validate new key and revoke compromised key",
+        "controller.validate_ssh_key_rotation",
     )
 
-    row["post_recovery_validation"] = "PASS" if validation["success"] else "FAIL"
-
-    final_success = (
-        detection["success"]
-        and evidence["success"]
-        and quarantine["success"]
-        and cleanup["success"]
-        and replacement["success"]
-        and validation["success"]
+    row["post_recovery_validation"] = (
+        "PASS" if success else "FAIL"
+    )
+    row["validation_duration_seconds"] = (
+        duration
     )
 
-    row["residual_compromise_score"] = 0 if validation["success"] else "UNKNOWN"
-    row["total_duration_seconds"] = round(time.time() - workflow_start, 2)
-    row["final_result"] = "PASS" if final_success else "FAIL"
+    if not success:
+        row["monitoring_restored"] = "UNKNOWN"
 
-    log_result(row)
+        return stop_and_log(
+            "FAILED_POST_RECOVERY_VALIDATION",
+            row,
+            workflow_start,
+        )
 
-    if final_success:
-        print("\n[SUCCESS] Full SSH key persistence recovery workflow passed.")
-        print("[METRIC] residual_compromise_score = 0")
-        return 0
+    row["new_key_success"] = "PASS"
+    row["old_key_denied"] = "PASS"
+    row["residual_compromise_count"] = "0/1"
+    row["residual_compromise_score"] = "0"
 
-    print("\n[FAIL] SSH key persistence recovery workflow failed.")
-    return 1
+    success, duration = run_step(
+        "Validate Wazuh monitoring restoration",
+        "controller.validate_wazuh_restoration",
+    )
+
+    row["monitoring_restored"] = (
+        "PASS" if success else "FAIL"
+    )
+
+    if not success:
+        return stop_and_log(
+            "FAILED_MONITORING_RESTORATION",
+            row,
+            workflow_start,
+        )
+
+    if not mark_selected_alert_processed(
+        SCENARIO
+    ):
+        return stop_and_log(
+            "FAILED_ALERT_STATE_UPDATE",
+            row,
+            workflow_start,
+        )
+
+    total_duration = round(
+        time.perf_counter() - workflow_start,
+        2,
+    )
+
+    row["total_duration_seconds"] = (
+        total_duration
+    )
+    row["final_result"] = "PASS"
+
+    write_result(row)
+
+    print(
+        "\n[SUCCESS] Full stolen SSH-key "
+        "recovery workflow passed."
+    )
+    print("[METRIC] new_key_success = PASS")
+    print("[METRIC] old_key_denied = PASS")
+    print(
+        "[METRIC] residual_compromise_count = "
+        "0/1"
+    )
+    print(
+        "[METRIC] residual_compromise_score = 0"
+    )
+    print(
+        "[METRIC] total_duration_seconds = "
+        f"{total_duration}"
+    )
+
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
-
+    raise SystemExit(main())

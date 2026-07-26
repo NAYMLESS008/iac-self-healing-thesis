@@ -29,9 +29,9 @@ def main():
     EVIDENCE_DIR.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    evidence_file = EVIDENCE_DIR / f"ssh_key_persistence_pre_replacement_{timestamp}.txt"
+    evidence_file = EVIDENCE_DIR / f"stolen_trusted_ssh_key_pre_replacement_{timestamp}.txt"
 
-    print("[INFO] Capturing SSH key persistence evidence...")
+    print("[INFO] Capturing stolen trusted SSH-key evidence...")
 
     target_command = f"""
 echo '=== TARGET SYSTEM INFO ==='
@@ -56,7 +56,7 @@ cat {TARGET_AUTHORIZED_KEYS}
     old_key_result = run_old_key_test()
 
     with evidence_file.open("w", encoding="utf-8") as f:
-        f.write("SSH KEY PERSISTENCE EVIDENCE - PRE REPLACEMENT\n")
+        f.write("STOLEN TRUSTED SSH KEY EVIDENCE - PRE REPLACEMENT\n")
         f.write("=" * 60 + "\n")
         f.write(f"Captured at: {datetime.now()}\n\n")
 
