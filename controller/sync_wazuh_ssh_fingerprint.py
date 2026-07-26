@@ -1,4 +1,4 @@
-﻿import base64
+import base64
 import json
 import subprocess
 from pathlib import Path
@@ -80,15 +80,17 @@ pattern = (
     r'[\\s\\S]*?'
     r'<match type="pcre2">'
     r'Accepted publickey\\.\\*SHA256:)'
-    r'[A-Za-z0-9+/=]+'
+    r'.*?'
     r'(</match>)'
 )
 
 replacement = (
     r'\\g<1>'
-    + {fingerprint!r}.replace(
-        "SHA256:",
-        ""
+    + re.escape(
+        {fingerprint!r}.replace(
+            "SHA256:",
+            ""
+        )
     )
     + r'\\g<2>'
 )

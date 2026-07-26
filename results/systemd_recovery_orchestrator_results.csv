@@ -1,0 +1,3 @@
+timestamp_utc,scenario,wazuh_detection,detection_check_duration_seconds,evidence_capture,evidence_capture_duration_seconds,quarantine,quarantine_duration_seconds,stale_agent_cleanup,stale_agent_cleanup_duration_seconds,replacement_recovery,replacement_duration_seconds,post_recovery_validation,validation_duration_seconds,monitoring_restored,residual_compromise_count,residual_compromise_score,total_duration_seconds,final_result
+2026-07-26T22:38:15+00:00,malicious_systemd_persistence,PASS,14.6,PASS,4.23,PASS,65.39,PASS,57.16,PASS,134.41,FAIL,9.94,FAIL,UNKNOWN,UNKNOWN,285.75,FAIL
+2026-07-26T22:59:07+00:00,malicious_systemd_persistence,PASS,14.17,PASS,4.26,PASS,70.16,PASS,57.62,PASS,149.82,PASS,28.41,PASS,0/6,0,324.45,PASS

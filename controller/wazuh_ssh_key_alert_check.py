@@ -149,33 +149,83 @@ def compromised_key_is_active():
         f"--project={PROJECT_ID}"
     )
 
-    result = subprocess.run(
-        [
-            "ssh",
-            "-o", "BatchMode=yes",
-            "-o", "IdentitiesOnly=yes",
-            "-o", "ConnectTimeout=15",
-            "-o", "StrictHostKeyChecking=accept-new",
-            "-i", str(compromised_private_key),
-            "-o", f"ProxyCommand={proxy_command}",
-            f"{EXPECTED_USER}@{TARGET_HOST}",
-            "whoami && hostname",
-        ],
-        capture_output=True,
+    command = [
+        "ssh",
+        "-o", "BatchMode=yes",
+        "-o", "IdentitiesOnly=yes",
+        "-o", "ConnectTimeout=15",
+        "-o", "ConnectionAttempts=1",
+        "-o", "ServerAliveInterval=5",
+        "-o", "ServerAliveCountMax=2",
+        "-o", "StrictHostKeyChecking=accept-new",
+        "-i", str(compromised_private_key),
+        "-o", f"ProxyCommand={proxy_command}",
+        f"{EXPECTED_USER}@{TARGET_HOST}",
+        "whoami && hostname",
+    ]
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=120,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
     )
 
-    if result.stdout:
-        print(result.stdout.strip())
+    try:
+        stdout, stderr = process.communicate(timeout=45)
+        return_code = process.returncode
 
-    if result.stderr:
-        print(result.stderr.strip())
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+
+        subprocess.run(
+            [
+                "taskkill",
+                "/PID", str(process.pid),
+                "/T",
+                "/F",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        try:
+            extra_stdout, extra_stderr = (
+                process.communicate(timeout=10)
+            )
+        except subprocess.TimeoutExpired:
+            extra_stdout = ""
+            extra_stderr = ""
+
+        stdout += extra_stdout or ""
+        stderr += extra_stderr or ""
+
+        if (
+            EXPECTED_USER in stdout
+            and EXPECTED_HOSTNAME in stdout
+        ):
+            return_code = 0
+        else:
+            return_code = 124
+
+    if stdout:
+        print(stdout.strip())
+
+    if stderr:
+        print(stderr.strip())
 
     return (
-        result.returncode == 0
-        and EXPECTED_USER in result.stdout
-        and EXPECTED_HOSTNAME in result.stdout
+        return_code == 0
+        and EXPECTED_USER in stdout
+        and EXPECTED_HOSTNAME in stdout
     )
 
 
