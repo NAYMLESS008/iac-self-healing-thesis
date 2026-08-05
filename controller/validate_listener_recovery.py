@@ -1,4 +1,4 @@
-﻿import json
+import json
 import subprocess
 import time
 from pathlib import Path
@@ -136,7 +136,46 @@ def check_listener_artifacts():
         "else echo LOG_FILE_ABSENT; fi"
     )
 
-    return run_target_command(command)
+    marker_groups = [
+        ("PORT_ABSENT", "PORT_PRESENT"),
+        ("PROCESS_ABSENT", "PROCESS_PRESENT"),
+        ("PID_FILE_ABSENT", "PID_FILE_PRESENT"),
+        ("LOG_FILE_ABSENT", "LOG_FILE_PRESENT"),
+    ]
+
+    last_result = {
+        "return_code": 1,
+        "stdout": "",
+        "stderr": "",
+    }
+
+    for attempt in range(1, 4):
+        last_result = run_target_command(command)
+        output = last_result["stdout"]
+
+        complete_output = all(
+            any(marker in output for marker in group)
+            for group in marker_groups
+        )
+
+        if complete_output:
+            if attempt > 1:
+                print(
+                    "[SUCCESS] Listener validation output "
+                    f"received on attempt {attempt}/3."
+                )
+
+            return last_result
+
+        print(
+            "[WARN] Listener validation output was incomplete "
+            f"on attempt {attempt}/3; retrying."
+        )
+
+        if attempt < 3:
+            time.sleep(5)
+
+    return last_result
 
 
 def wait_for_wazuh_restoration():
