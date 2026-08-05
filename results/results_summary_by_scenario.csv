@@ -1,7 +1,7 @@
 category,data_quality,scenario,scenario_label,included_runs,mean_total_duration_seconds,median_total_duration_seconds,minimum_total_duration_seconds,maximum_total_duration_seconds,sample_standard_deviation_seconds,detection_status,evidence_status,replacement_status,validation_status,monitoring_status,zero_residual_status
 MAIN,FORMAL_REPEATED,malicious_cron_persistence,Malicious cron persistence,5,560.57,375.43,345.31,1000.14,290.04,PASS,PASS,PASS,PASS,PASS,PASS
 MAIN,FORMAL_REPEATED,malicious_systemd_persistence,Malicious systemd persistence,5,881.45,1008.41,637.59,1065.11,202.18,PASS,PASS,PASS,PASS,PASS,PASS
-MAIN,FORMAL_REPEATED,ssh_key_persistence,Unauthorized SSH public-key persistence,5,371.25,347.86,319.5,487.14,66.29,PASS,PASS,PASS,PASS,NOT_RECORDED,PASS
+MAIN,FORMAL_REPEATED,unauthorized_ssh_public_key,Unauthorized SSH public-key persistence,5,1007.06,996.96,983.35,1038.58,23.29,PASS,PASS,PASS,PASS,PASS,PASS
 MAIN,FORMAL_REPEATED,unauthorized_local_user,Unauthorized local user,5,439.1,454.68,332.87,508.73,67.63,PASS,PASS,PASS,PASS,PASS,PASS
 MAIN,FORMAL_REPEATED,unexpected_listener,Unexpected TCP listener,5,1052.87,1053.84,998.99,1089.24,37.6,PASS,PASS,PASS,PASS,PASS,PASS
 SUPPLEMENTARY,SUPPLEMENTARY_REPEATED,stolen_trusted_ssh_key,Stolen trusted SSH private key,2,351.08,351.08,321.08,381.08,42.43,PASS,PASS,PASS,PASS,PASS,PASS

@@ -16,6 +16,10 @@ README_OUTPUT = RESULTS_DIR / "results_dataset_readme.txt"
 
 
 STANDARD_FILES = {
+    "ssh_public_key_recovery_formal_results.csv": {
+        "label": "Unauthorized SSH public-key persistence",
+        "quality": "FORMAL_REPEATED",
+    },
     "cron_recovery_formal_results.csv": {
         "label": "Malicious cron persistence",
         "quality": "FORMAL_REPEATED",
@@ -345,30 +349,22 @@ def load_mixed_ssh_results():
                 timestamp in SSH_FORMAL_TIMESTAMPS
                 and row["final_result"] == "PASS"
             ):
-                record = normalise_standard_row(
-                    row,
-                    category="MAIN",
-                    quality="FORMAL_REPEATED",
-                    label=(
-                        "Unauthorized SSH public-key "
-                        "persistence"
-                    ),
-                    source_file=path.name,
-                    source_row=source_row,
-                    reason=(
-                        "Included in the five-run formal "
-                        "SSH-key persistence dataset."
-                    ),
+                excluded.append(
+                    {
+                        "source_file": path.name,
+                        "source_row": source_row,
+                        "timestamp_utc": timestamp,
+                        "scenario": row["scenario"],
+                        "final_result": row["final_result"],
+                        "total_duration_seconds": row[
+                            "total_duration_seconds"
+                        ],
+                        "exclusion_reason": (
+                            "Superseded by the standardized "
+                            "five-run SSH public-key dataset."
+                        ),
+                    }
                 )
-
-                record["monitoring_restored"] = (
-                    "NOT_RECORDED"
-                )
-                record[
-                    "residual_compromise_count"
-                ] = "NOT_RECORDED"
-
-                included_main.append(record)
 
             else:
                 reason = (
@@ -504,12 +500,6 @@ def load_mixed_ssh_results():
                 f"Unexpected column count {len(raw)} "
                 f"at source row {source_row}."
             )
-
-    if len(included_main) != 5:
-        raise ValueError(
-            "Expected five formal SSH-key persistence runs, "
-            f"found {len(included_main)}."
-        )
 
     if len(included_supplementary) != 2:
         raise ValueError(

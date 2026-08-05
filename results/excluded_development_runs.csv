@@ -6,9 +6,14 @@ ssh_key_recovery_orchestrator_results.csv,4,2026-07-17T00:12:05,ssh_key_persiste
 ssh_key_recovery_orchestrator_results.csv,5,2026-07-17T00:33:29,ssh_key_persistence,PASS,551.78,Initial successful pilot run.
 local_user_recovery_orchestrator_results.csv,2,2026-07-20T20:55:53+00:00,unauthorized_local_user,FAILED_REPLACEMENT_RECOVERY,317.93,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
 ssh_key_recovery_orchestrator_results.csv,6,2026-07-20T23:01:56,ssh_key_persistence,NO_RECOVERY_TRIGGERED,14.97,"Development, failed-trigger or failed workflow run."
+ssh_key_recovery_orchestrator_results.csv,7,2026-07-20T23:16:02,ssh_key_persistence,PASS,319.5,Superseded by the standardized five-run SSH public-key dataset.
+ssh_key_recovery_orchestrator_results.csv,8,2026-07-20T23:28:31,ssh_key_persistence,PASS,347.86,Superseded by the standardized five-run SSH public-key dataset.
+ssh_key_recovery_orchestrator_results.csv,9,2026-07-21T00:00:18,ssh_key_persistence,PASS,357.63,Superseded by the standardized five-run SSH public-key dataset.
 ssh_key_recovery_orchestrator_results.csv,10,2026-07-21T00:15:38,ssh_key_persistence,NO_RECOVERY_TRIGGERED,13.3,"Development, failed-trigger or failed workflow run."
 ssh_key_recovery_orchestrator_results.csv,11,2026-07-21T00:22:25,ssh_key_persistence,NO_RECOVERY_TRIGGERED,13.45,"Development, failed-trigger or failed workflow run."
+ssh_key_recovery_orchestrator_results.csv,12,2026-07-21T00:28:51,ssh_key_persistence,PASS,487.14,Superseded by the standardized five-run SSH public-key dataset.
 ssh_key_recovery_orchestrator_results.csv,13,2026-07-21T09:40:58,ssh_key_persistence,NO_RECOVERY_TRIGGERED,11.39,"Development, failed-trigger or failed workflow run."
+ssh_key_recovery_orchestrator_results.csv,14,2026-07-21T09:44:05,ssh_key_persistence,PASS,344.13,Superseded by the standardized five-run SSH public-key dataset.
 ssh_key_recovery_orchestrator_results.csv,15,2026-07-26T18:05:07+00:00,stolen_trusted_ssh_key,NO_RECOVERY_TRIGGERED,13.54,"Development, failed-trigger, credential-rotation failure or failed replacement run."
 ssh_key_recovery_orchestrator_results.csv,16,2026-07-26T18:08:32+00:00,stolen_trusted_ssh_key,FAILED_REPLACEMENT_RECOVERY,552.8,"Development, failed-trigger, credential-rotation failure or failed replacement run."
 ssh_key_recovery_orchestrator_results.csv,18,2026-07-26T18:52:32+00:00,stolen_trusted_ssh_key,NO_RECOVERY_TRIGGERED,7.62,"Development, failed-trigger, credential-rotation failure or failed replacement run."
@@ -20,3 +25,8 @@ systemd_recovery_formal_results.csv,1,2026-07-30T22:36:02+00:00,malicious_system
 systemd_recovery_formal_results.csv,2,2026-07-30T22:59:04+00:00,malicious_systemd_persistence,NO_RECOVERY_TRIGGERED,56.02,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
 systemd_recovery_formal_results.csv,3,2026-08-03T13:53:26+00:00,malicious_systemd_persistence,FAILED_EVIDENCE_CAPTURE,33.65,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
 listener_recovery_formal_results.csv,4,2026-08-05T19:02:27+00:00,unexpected_listener,FAIL,322.7,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
+ssh_public_key_recovery_formal_results.csv,1,2026-08-05T21:25:14+00:00,unauthorized_ssh_public_key,NO_RECOVERY_TRIGGERED,20.08,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
+ssh_public_key_recovery_formal_results.csv,2,2026-08-05T21:27:08+00:00,unauthorized_ssh_public_key,NO_RECOVERY_TRIGGERED,21.13,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
+ssh_public_key_recovery_formal_results.csv,3,2026-08-05T21:29:33+00:00,unauthorized_ssh_public_key,FAILED_EVIDENCE_CAPTURE,72.08,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
+ssh_public_key_recovery_formal_results.csv,4,2026-08-05T21:32:51+00:00,unauthorized_ssh_public_key,FAILED_EVIDENCE_CAPTURE,66.93,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
+ssh_public_key_recovery_formal_results.csv,5,2026-08-05T21:36:57+00:00,unauthorized_ssh_public_key,FAIL,362.05,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
