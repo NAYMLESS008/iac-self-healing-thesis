@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from controller.iap_helpers import run_target_command, run_wazuh_command
@@ -80,7 +80,9 @@ def main():
     wazuh_result = run_wazuh_command(
         "sudo grep -F "
         f"'{ATTACK_PATH}' "
-        "/var/ossec/logs/alerts/alerts.json | tail -n 10"
+        "/var/ossec/logs/alerts/alerts.json "
+        "| grep -F '\"location\":\"syscheck\"' "
+        "| tail -n 1 || true"
     )
 
     wazuh_section = (
@@ -118,11 +120,53 @@ def main():
         and "CRON_PERSISTENCE_ACTIVE" in payload_result["stdout"]
     )
 
+    wazuh_output = wazuh_result["stdout"]
+
     wazuh_captured = (
         wazuh_result["return_code"] == 0
-        and '"rule":{"level":7' in wazuh_result["stdout"]
-        and '"id":"550"' in wazuh_result["stdout"]
-        and '"location":"syscheck"' in wazuh_result["stdout"]
+        and (
+            '"id":"550"' in wazuh_output
+            or '"id":"554"' in wazuh_output
+        )
+        and '"location":"syscheck"' in wazuh_output
+        and ATTACK_PATH in wazuh_output
+    )
+
+    identity_captured = identity_result["return_code"] == 0
+    service_captured = service_result["stdout"].strip() == "active"
+
+    evidence_checks = {
+        "target_identity": identity_captured,
+        "malicious_cron_file": cron_captured,
+        "cron_file_metadata": metadata_captured,
+        "payload_execution": payload_confirmed,
+        "cron_service_status": service_captured,
+        "wazuh_alert": wazuh_captured,
+    }
+
+    evidence_items_required = len(evidence_checks)
+    evidence_items_captured = sum(evidence_checks.values())
+
+    evidence_completeness_percentage = round(
+        (
+            evidence_items_captured
+            / evidence_items_required
+        )
+        * 100,
+        2,
+    )
+
+    print(
+        "[METRIC] evidence_items_required = "
+        f"{evidence_items_required}"
+    )
+    print(
+        "[METRIC] evidence_items_captured = "
+        f"{evidence_items_captured}"
+    )
+    print(
+        "[METRIC] evidence_completeness_percentage = "
+        f"{evidence_completeness_percentage}"
     )
 
     if not cron_captured:

@@ -1,4 +1,4 @@
-import json
+﻿import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,10 +15,14 @@ ZONE = "europe-west1-b"
 TARGET_HOST = "thesis-self-healing-vm"
 TARGET_USER = "thesisadmin"
 
+PORT = 4444
+RULE_ID = "100120"
+ALERT_LOCATION = "thesis unexpected listener"
+
 
 def get_current_private_key():
     state = json.loads(
-        STATE_FILE.read_text(encoding="utf-8")
+        STATE_FILE.read_text(encoding="utf-8-sig")
     )
 
     private_key = Path(state["new_private_key"])
@@ -32,185 +36,98 @@ def get_current_private_key():
 
 
 def run_remote_evidence_command(private_key):
-    remote_command = r'''
+    remote_command = rf'''
+PID_FILE=/var/tmp/thesis-unexpected-listener.pid
+LOG_FILE=/var/tmp/thesis-unexpected-listener.log
+
 echo "=== TIMESTAMP UTC ==="
 date -u --iso-8601=seconds
 
 echo
-echo "=== HOST ==="
+echo "=== TARGET IDENTITY ==="
 hostname
-whoami
+hostname -I
 
 echo
-echo "=== SERVICE FILE ==="
-sudo ls -la /etc/systemd/system/thesis-persistence.service
-sudo cat /etc/systemd/system/thesis-persistence.service
+echo "=== LISTENER PORT {PORT} ==="
+ss -H -lntp 'sport = :{PORT}' || true
 
 echo
-echo "=== MALICIOUS SCRIPT ==="
-sudo ls -la /usr/local/bin/thesis-persistence.sh
-sudo cat /usr/local/bin/thesis-persistence.sh
+echo "=== PID FILE ==="
+sudo cat "$PID_FILE" 2>/dev/null || true
+
+listener_pid="$(
+    sudo cat "$PID_FILE" 2>/dev/null || true
+)"
 
 echo
-echo "=== SERVICE ENABLED STATE ==="
-sudo systemctl is-enabled thesis-persistence.service || true
+echo "=== PROCESS DETAILS ==="
+if test -n "$listener_pid" \
+    && sudo test -r "/proc/$listener_pid/cmdline"; then
+    ps -fp "$listener_pid" || true
+
+    echo
+    echo "--- COMMAND LINE ---"
+    sudo tr '\0' ' ' < "/proc/$listener_pid/cmdline" || true
+    echo
+
+    echo
+    echo "--- EXECUTABLE ---"
+    sudo readlink -f "/proc/$listener_pid/exe" || true
+fi
 
 echo
-echo "=== SERVICE ACTIVE STATE ==="
-sudo systemctl is-active thesis-persistence.service || true
+echo "=== ATTACK ARTIFACTS ==="
+sudo ls -la "$PID_FILE" "$LOG_FILE" 2>/dev/null || true
 
 echo
-echo "=== SERVICE STATUS ==="
-sudo systemctl status thesis-persistence.service --no-pager || true
-
-echo
-echo "=== ENABLEMENT SYMLINK ==="
-sudo ls -la /etc/systemd/system/multi-user.target.wants/thesis-persistence.service || true
-
-echo
-echo "=== RUNNING PROCESS ==="
-sudo pgrep -a -f thesis-persistence || true
-
-echo
-echo "=== HEARTBEAT EVIDENCE ==="
-sudo tail -n 10 /var/tmp/thesis-systemd-heartbeat.log || true
-
-echo
-echo "=== FILE HASHES ==="
-sudo sha256sum \
-  /etc/systemd/system/thesis-persistence.service \
-  /usr/local/bin/thesis-persistence.sh || true
+echo "=== LISTENER LOG ==="
+sudo tail -n 50 "$LOG_FILE" 2>/dev/null || true
 
 echo
 echo "=== EVIDENCE ITEM STATUS ==="
 
-if test "$(hostname)" = "thesis-self-healing-vm"; then
-  echo "EVIDENCE_TARGET_IDENTITY=PASS"
+if test "$(hostname)" = "{TARGET_HOST}"; then
+    echo "EVIDENCE_TARGET_IDENTITY=PASS"
 else
-  echo "EVIDENCE_TARGET_IDENTITY=FAIL"
+    echo "EVIDENCE_TARGET_IDENTITY=FAIL"
 fi
 
-if sudo test -s /etc/systemd/system/thesis-persistence.service; then
-  echo "EVIDENCE_SERVICE_FILE=PASS"
+if ss -H -lnt 'sport = :{PORT}' | grep -q .; then
+    echo "EVIDENCE_LISTENING_PORT=PASS"
 else
-  echo "EVIDENCE_SERVICE_FILE=FAIL"
+    echo "EVIDENCE_LISTENING_PORT=FAIL"
 fi
 
-if sudo test -s /usr/local/bin/thesis-persistence.sh; then
-  echo "EVIDENCE_SCRIPT_FILE=PASS"
+if sudo test -s "$PID_FILE"; then
+    echo "EVIDENCE_PID_FILE=PASS"
 else
-  echo "EVIDENCE_SCRIPT_FILE=FAIL"
+    echo "EVIDENCE_PID_FILE=FAIL"
 fi
 
-if sudo systemctl is-enabled --quiet thesis-persistence.service; then
-  echo "EVIDENCE_SERVICE_ENABLED=PASS"
+if test -n "$listener_pid" \
+    && sudo test -r "/proc/$listener_pid/cmdline" \
+    && sudo tr '\0' ' ' < "/proc/$listener_pid/cmdline" \
+       | grep -Fq "python3 -m http.server {PORT}"; then
+    echo "EVIDENCE_PROCESS_COMMAND=PASS"
 else
-  echo "EVIDENCE_SERVICE_ENABLED=FAIL"
+    echo "EVIDENCE_PROCESS_COMMAND=FAIL"
 fi
 
-if sudo systemctl is-active --quiet thesis-persistence.service; then
-  echo "EVIDENCE_SERVICE_ACTIVE=PASS"
+if test -n "$listener_pid" \
+    && sudo test -e "/proc/$listener_pid/exe" \
+    && test -n "$(
+        sudo readlink -f "/proc/$listener_pid/exe" 2>/dev/null
+    )"; then
+    echo "EVIDENCE_PROCESS_EXECUTABLE=PASS"
 else
-  echo "EVIDENCE_SERVICE_ACTIVE=FAIL"
+    echo "EVIDENCE_PROCESS_EXECUTABLE=FAIL"
 fi
 
-if sudo test -L /etc/systemd/system/multi-user.target.wants/thesis-persistence.service; then
-  echo "EVIDENCE_ENABLEMENT_SYMLINK=PASS"
+if sudo test -f "$LOG_FILE"; then
+    echo "EVIDENCE_LOG_FILE=PASS"
 else
-  echo "EVIDENCE_ENABLEMENT_SYMLINK=FAIL"
-fi
-
-main_pid="$(sudo systemctl show \
-  --property=MainPID \
-  --value \
-  thesis-persistence.service 2>/dev/null || echo 0)"
-
-if test "${main_pid:-0}" -gt 0 2>/dev/null \
-  && sudo kill -0 "$main_pid" 2>/dev/null; then
-  echo "EVIDENCE_RUNNING_PROCESS=PASS"
-else
-  echo "EVIDENCE_RUNNING_PROCESS=FAIL"
-fi
-
-if sudo test -s /var/tmp/thesis-systemd-heartbeat.log; then
-  echo "EVIDENCE_HEARTBEAT=PASS"
-else
-  echo "EVIDENCE_HEARTBEAT=FAIL"
-fi
-
-if sudo sha256sum \
-  /etc/systemd/system/thesis-persistence.service \
-  /usr/local/bin/thesis-persistence.sh \
-  >/dev/null 2>&1; then
-  echo "EVIDENCE_FILE_HASHES=PASS"
-else
-  echo "EVIDENCE_FILE_HASHES=FAIL"
-fi
-
-echo
-echo "=== EVIDENCE ITEM STATUS ==="
-
-if test "$(hostname)" = "thesis-self-healing-vm"; then
-  echo "EVIDENCE_TARGET_IDENTITY=PASS"
-else
-  echo "EVIDENCE_TARGET_IDENTITY=FAIL"
-fi
-
-if sudo test -s /etc/systemd/system/thesis-persistence.service; then
-  echo "EVIDENCE_SERVICE_FILE=PASS"
-else
-  echo "EVIDENCE_SERVICE_FILE=FAIL"
-fi
-
-if sudo test -s /usr/local/bin/thesis-persistence.sh; then
-  echo "EVIDENCE_SCRIPT_FILE=PASS"
-else
-  echo "EVIDENCE_SCRIPT_FILE=FAIL"
-fi
-
-if sudo systemctl is-enabled --quiet thesis-persistence.service; then
-  echo "EVIDENCE_SERVICE_ENABLED=PASS"
-else
-  echo "EVIDENCE_SERVICE_ENABLED=FAIL"
-fi
-
-if sudo systemctl is-active --quiet thesis-persistence.service; then
-  echo "EVIDENCE_SERVICE_ACTIVE=PASS"
-else
-  echo "EVIDENCE_SERVICE_ACTIVE=FAIL"
-fi
-
-if sudo test -L /etc/systemd/system/multi-user.target.wants/thesis-persistence.service; then
-  echo "EVIDENCE_ENABLEMENT_SYMLINK=PASS"
-else
-  echo "EVIDENCE_ENABLEMENT_SYMLINK=FAIL"
-fi
-
-main_pid="$(sudo systemctl show \
-  --property=MainPID \
-  --value \
-  thesis-persistence.service 2>/dev/null || echo 0)"
-
-if test "${main_pid:-0}" -gt 0 2>/dev/null \
-  && sudo kill -0 "$main_pid" 2>/dev/null; then
-  echo "EVIDENCE_RUNNING_PROCESS=PASS"
-else
-  echo "EVIDENCE_RUNNING_PROCESS=FAIL"
-fi
-
-if sudo test -s /var/tmp/thesis-systemd-heartbeat.log; then
-  echo "EVIDENCE_HEARTBEAT=PASS"
-else
-  echo "EVIDENCE_HEARTBEAT=FAIL"
-fi
-
-if sudo sha256sum \
-  /etc/systemd/system/thesis-persistence.service \
-  /usr/local/bin/thesis-persistence.sh \
-  >/dev/null 2>&1; then
-  echo "EVIDENCE_FILE_HASHES=PASS"
-else
-  echo "EVIDENCE_FILE_HASHES=FAIL"
+    echo "EVIDENCE_LOG_FILE=FAIL"
 fi
 '''
 
@@ -247,6 +164,7 @@ fi
 
     try:
         stdout, stderr = process.communicate(timeout=45)
+
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout or ""
         stderr = exc.stderr or ""
@@ -272,20 +190,15 @@ fi
 
 
 def get_matching_wazuh_alert():
-    service_path = (
-        "/etc/systemd/system/"
-        "thesis-persistence.service"
-    )
-
     command = (
         "sudo grep -F "
-        f"'{service_path}' "
+        f"'THESIS_UNEXPECTED_LISTENER port={PORT}' "
         "/var/ossec/logs/alerts/alerts.json "
         "2>/dev/null || true; "
         "sudo find /var/ossec/logs/alerts "
         "-type f -name 'ossec-alerts-*.json.gz' "
         "-exec zgrep -h -F "
-        f"'{service_path}' "
+        f"'THESIS_UNEXPECTED_LISTENER port={PORT}' "
         "{} + 2>/dev/null || true"
     )
 
@@ -300,16 +213,18 @@ def get_matching_wazuh_alert():
             continue
 
         alert_id = str(alert.get("id", ""))
+        rule_id = str(
+            alert.get("rule", {}).get("id", "")
+        )
 
         if (
             alert_id
-            and alert.get("location") == "syscheck"
             and alert.get("agent", {}).get("name")
             == TARGET_HOST
-            and alert.get("syscheck", {}).get("path")
-            == service_path
-            and alert.get("syscheck", {}).get("event")
-            in {"added", "modified"}
+            and rule_id == RULE_ID
+            and alert.get("location") == ALERT_LOCATION
+            and f"THESIS_UNEXPECTED_LISTENER port={PORT}"
+            in alert.get("full_log", "")
         ):
             matching_alerts[alert_id] = alert
 
@@ -323,10 +238,10 @@ def get_matching_wazuh_alert():
 
     return result, json.dumps(newest_alert)
 
+
 def main():
     print(
-        "[INFO] Capturing malicious systemd "
-        "persistence evidence..."
+        "[INFO] Capturing unexpected-listener evidence..."
     )
 
     private_key = get_current_private_key()
@@ -341,14 +256,11 @@ def main():
 
     target_evidence_markers = [
         "EVIDENCE_TARGET_IDENTITY=PASS",
-        "EVIDENCE_SERVICE_FILE=PASS",
-        "EVIDENCE_SCRIPT_FILE=PASS",
-        "EVIDENCE_SERVICE_ENABLED=PASS",
-        "EVIDENCE_SERVICE_ACTIVE=PASS",
-        "EVIDENCE_ENABLEMENT_SYMLINK=PASS",
-        "EVIDENCE_RUNNING_PROCESS=PASS",
-        "EVIDENCE_HEARTBEAT=PASS",
-        "EVIDENCE_FILE_HASHES=PASS",
+        "EVIDENCE_LISTENING_PORT=PASS",
+        "EVIDENCE_PID_FILE=PASS",
+        "EVIDENCE_PROCESS_COMMAND=PASS",
+        "EVIDENCE_PROCESS_EXECUTABLE=PASS",
+        "EVIDENCE_LOG_FILE=PASS",
     ]
 
     evidence_items_required = (
@@ -385,7 +297,10 @@ def main():
         f"{evidence_completeness_percentage}"
     )
 
-    EVIDENCE_DIR.mkdir(exist_ok=True)
+    EVIDENCE_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     timestamp = datetime.now(
         timezone.utc
@@ -394,17 +309,17 @@ def main():
     evidence_file = (
         EVIDENCE_DIR
         / (
-            "systemd_persistence_pre_replacement_"
+            "unexpected_listener_pre_replacement_"
             f"{timestamp}.txt"
         )
     )
 
     content = (
-        "MALICIOUS SYSTEMD PERSISTENCE EVIDENCE\n"
+        "UNEXPECTED LISTENER EVIDENCE\n"
         "CAPTURED BEFORE TERRAFORM REPLACEMENT\n"
-        "========================================\n\n"
+        "=====================================\n\n"
         f"{stdout}\n"
-        "\n=== MATCHING WAZUH SYSCHECK ALERT ===\n"
+        "\n=== MATCHING WAZUH LISTENER ALERT ===\n"
         f"{matching_alert or 'MATCHING_ALERT_NOT_FOUND'}\n"
         "\n=== EVIDENCE COMPLETENESS ===\n"
         f"evidence_items_required="
@@ -441,7 +356,7 @@ def main():
             f"{evidence_file}"
         )
         print(
-            "[FAIL] Required systemd persistence "
+            "[FAIL] Required unexpected-listener "
             "evidence was incomplete."
         )
         return 1

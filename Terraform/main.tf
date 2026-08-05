@@ -95,6 +95,61 @@ resource "google_compute_instance" "vm" {
 WAZUH_AUTH_LOG
       fi
 
+      echo "[STARTUP] Configuring listening-port command monitoring" >> /var/log/thesis-startup.log
+
+      touch /var/ossec/etc/local_internal_options.conf
+
+      grep -q '^logcollector.remote_commands=1$' /var/ossec/etc/local_internal_options.conf ||         echo 'logcollector.remote_commands=1' >> /var/ossec/etc/local_internal_options.conf
+
+      python3 - <<'PY'
+from pathlib import Path
+import re
+
+path = Path("/var/ossec/etc/ossec.conf")
+text = path.read_text()
+
+text, command_count = re.subn(
+    r"(?m)^[ \t]*<command>netstat .*?</command>$",
+    """    <command>ss -H -lnt | awk '{print $4}' | sort -u</command>""",
+    text,
+    count=1,
+)
+
+text, frequency_count = re.subn(
+    r"(<alias>netstat listening ports</alias>\s*<frequency>)\d+(</frequency>)",
+    r"\g<1>10\g<2>",
+    text,
+    count=1,
+)
+
+if command_count != 1:
+    raise SystemExit(
+        f"Expected one netstat command, replaced {command_count}."
+    )
+
+if frequency_count != 1:
+    raise SystemExit(
+        f"Expected one listener frequency, replaced {frequency_count}."
+    )
+
+path.write_text(text)
+PY
+
+      echo "[STARTUP] Configuring explicit thesis listener detection" >> /var/log/thesis-startup.log
+
+      if ! grep -q '<alias>thesis unexpected listener</alias>' /var/ossec/etc/ossec.conf; then
+        cat >> /var/ossec/etc/ossec.conf <<'WAZUH_THESIS_LISTENER'
+<ossec_config>
+  <localfile>
+    <log_format>full_command</log_format>
+    <command>if ss -H -lnt 'sport = :4444' | grep -q .; then echo 'THESIS_UNEXPECTED_LISTENER port=4444'; else echo 'THESIS_LISTENER_CLEAN'; fi</command>
+    <alias>thesis unexpected listener</alias>
+    <frequency>10</frequency>
+  </localfile>
+</ossec_config>
+WAZUH_THESIS_LISTENER
+      fi
+
       echo "[STARTUP] Enabling verbose SSH authentication logging" >> /var/log/thesis-startup.log
 
       if grep -qE '^[[:space:]]*LogLevel[[:space:]]+' /etc/ssh/sshd_config; then

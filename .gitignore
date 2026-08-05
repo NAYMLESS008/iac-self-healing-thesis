@@ -27,3 +27,22 @@ Thumbs.db
 # Python cache files
 __pycache__/
 *.pyc
+
+# Controller runtime state
+controller/processed_alerts.json
+controller/ssh_rotation_state.json
+
+# Development backups
+*.pre_*_backup
+*.pre_*_backup.*
+
+# Controller runtime state
+controller/processed_alerts.json
+controller/ssh_rotation_state.json
+
+# Development backups
+*.pre_*_backup
+*.pre_*_backup.*
+
+# Results backup files
+results/*.pre_*.csv

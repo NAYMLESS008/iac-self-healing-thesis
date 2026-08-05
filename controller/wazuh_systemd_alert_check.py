@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 try:
@@ -34,94 +35,62 @@ SCENARIO = "malicious_systemd_persistence"
 
 
 def target_persistence_exists():
-    state_file = (
-        Path(__file__).resolve().parents[1]
-        / "controller"
-        / "ssh_rotation_state.json"
-    )
-
-    state = json.loads(
-        state_file.read_text(encoding="utf-8")
-    )
-
-    private_key = Path(state["new_private_key"])
-
     remote_command = (
-        f"service_file=$(test -f {SERVICE_PATH} "
-        "&& echo PRESENT || echo ABSENT); "
-        f"script_file=$(test -f {SCRIPT_PATH} "
-        "&& echo PRESENT || echo ABSENT); "
-        "service_active=$(sudo systemctl is-active "
-        "thesis-persistence.service 2>/dev/null || true); "
-        "printf '%s|%s|%s\n' "
-        '"$service_file" "$script_file" "$service_active"'
+        f"if test -f {SERVICE_PATH}; "
+        "then echo SERVICE_FILE_PRESENT; "
+        "else echo SERVICE_FILE_ABSENT; fi; "
+        f"if test -f {SCRIPT_PATH}; "
+        "then echo SCRIPT_FILE_PRESENT; "
+        "else echo SCRIPT_FILE_ABSENT; fi; "
+        "if sudo systemctl is-active --quiet "
+        "thesis-persistence.service; "
+        "then echo SERVICE_ACTIVE; "
+        "else echo SERVICE_INACTIVE; fi"
     )
 
-    proxy_command = (
-        "gcloud.cmd compute start-iap-tunnel "
-        "thesis-self-healing-vm %p "
-        "--listen-on-stdin "
-        "--zone=europe-west1-b "
-        "--project=project-207ee30d-2273-45b0-8a0"
-    )
+    required_markers = {
+        "SERVICE_FILE_PRESENT",
+        "SCRIPT_FILE_PRESENT",
+        "SERVICE_ACTIVE",
+    }
 
-    command = [
-        "ssh",
-        "-o", "BatchMode=yes",
-        "-o", "IdentitiesOnly=yes",
-        "-o", "ConnectTimeout=15",
-        "-o", "ConnectionAttempts=1",
-        "-o", "StrictHostKeyChecking=accept-new",
-        "-i", str(private_key),
-        "-o", f"ProxyCommand={proxy_command}",
-        "thesisadmin@thesis-self-healing-vm",
-        remote_command,
-    ]
+    for attempt in range(1, 4):
+        result = run_target_command(remote_command)
+        output = result["stdout"].strip()
 
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
-
-    try:
-        stdout, stderr = process.communicate(timeout=45)
-    except subprocess.TimeoutExpired as exc:
-        stdout = exc.stdout or ""
-        stderr = exc.stderr or ""
-
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode(errors="replace")
-
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode(errors="replace")
-
-        subprocess.run(
-            [
-                "taskkill",
-                "/PID", str(process.pid),
-                "/T",
-                "/F",
-            ],
-            capture_output=True,
-            text=True,
+        print(
+            f"[TARGET STATE] attempt {attempt}/3: "
+            f"{output or 'EMPTY'}"
         )
 
-    output = stdout.strip()
+        output_markers = set(output.splitlines())
 
-    print(f"[TARGET STATE] {output}")
+        if required_markers.issubset(output_markers):
+            return True
 
-    return "PRESENT|PRESENT|active" in output
+        if output:
+            return False
 
+        if result["stderr"]:
+            print("[TARGET CHECK STDERR]")
+            print(result["stderr"])
+
+        if attempt < 3:
+            time.sleep(5)
+
+    return False
 
 def unprocessed_wazuh_alert_exists():
     remote_command = (
         "sudo grep -F "
         f"'{SERVICE_PATH}' "
         "/var/ossec/logs/alerts/alerts.json "
-        "| tail -n 100 || true"
+        "2>/dev/null || true; "
+        "sudo find /var/ossec/logs/alerts "
+        "-type f -name 'ossec-alerts-*.json.gz' "
+        "-exec zgrep -h -F "
+        f"'{SERVICE_PATH}' "
+        "{} + 2>/dev/null || true"
     )
 
     result = run_wazuh_command(remote_command)
@@ -130,7 +99,7 @@ def unprocessed_wazuh_alert_exists():
         print("[NO WAZUH SYSTEMD ALERT FOUND]")
         return False
 
-    matching_alerts = []
+    matching_alerts = {}
 
     for line in result["stdout"].splitlines():
         try:
@@ -139,6 +108,7 @@ def unprocessed_wazuh_alert_exists():
             continue
 
         alert_id = str(alert.get("id", ""))
+
         agent_name = alert.get(
             "agent",
             {},
@@ -160,7 +130,7 @@ def unprocessed_wazuh_alert_exists():
             and event in {"added", "modified"}
             and "syscheck" in groups
         ):
-            matching_alerts.append(alert)
+            matching_alerts[alert_id] = alert
 
     if not matching_alerts:
         print(
@@ -169,19 +139,32 @@ def unprocessed_wazuh_alert_exists():
         )
         return False
 
-    latest_alert = matching_alerts[-1]
-    alert_id = str(latest_alert["id"])
+    ordered_alerts = sorted(
+        matching_alerts.values(),
+        key=lambda alert: alert.get("timestamp", ""),
+        reverse=True,
+    )
 
-    if is_alert_processed(
-        SCENARIO,
-        alert_id,
-    ):
+    selected_alert = None
+
+    for alert in ordered_alerts:
+        alert_id = str(alert["id"])
+
+        if not is_alert_processed(
+            SCENARIO,
+            alert_id,
+        ):
+            selected_alert = alert
+            break
+
+    if selected_alert is None:
         print(
-            "[ALREADY PROCESSED] Systemd alert "
-            f"ID {alert_id} has already completed "
-            "recovery."
+            "[NO UNPROCESSED WAZUH SYSTEMD "
+            "ALERT FOUND]"
         )
         return False
+
+    alert_id = str(selected_alert["id"])
 
     save_selected_alert(
         SCENARIO,
@@ -193,10 +176,9 @@ def unprocessed_wazuh_alert_exists():
         "ALERT FOUND]"
     )
     print(f"[ALERT ID] {alert_id}")
-    print(json.dumps(latest_alert))
+    print(json.dumps(selected_alert))
 
     return True
-
 
 def recoverable_alert_exists():
     if not unprocessed_wazuh_alert_exists():

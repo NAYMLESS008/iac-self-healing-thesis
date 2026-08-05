@@ -1,5 +1,6 @@
 from controller.alert_state import mark_selected_alert_processed
 import csv
+import re
 import subprocess
 import sys
 import time
@@ -8,8 +9,30 @@ from pathlib import Path
 
 
 RESULTS_DIR = Path("results")
-RESULTS_FILE = RESULTS_DIR / "systemd_recovery_orchestrator_results.csv"
+RESULTS_FILE = RESULTS_DIR / "systemd_recovery_formal_results.csv"
 
+
+def extract_metric(
+    output,
+    metric_name,
+    default="UNKNOWN",
+):
+    pattern = (
+        rf"^\[METRIC\]\s+"
+        rf"{re.escape(metric_name)}"
+        rf"\s*=\s*(.+?)\s*$"
+    )
+
+    match = re.search(
+        pattern,
+        output,
+        flags=re.MULTILINE,
+    )
+
+    if not match:
+        return default
+
+    return match.group(1).strip()
 
 def run_step(name, command):
     print(f"\n[STEP] {name}")
@@ -55,6 +78,9 @@ def log_result(row):
         "detection_check_duration_seconds",
         "evidence_capture",
         "evidence_capture_duration_seconds",
+        "evidence_items_required",
+        "evidence_items_captured",
+        "evidence_completeness_percentage",
         "quarantine",
         "quarantine_duration_seconds",
         "stale_agent_cleanup",
@@ -63,7 +89,12 @@ def log_result(row):
         "replacement_duration_seconds",
         "post_recovery_validation",
         "validation_duration_seconds",
+        "validation_indicators_total",
+        "validation_indicators_passed",
+        "validation_success_percentage",
         "monitoring_restored",
+        "fim_realtime_ready",
+        "monitoring_restoration_duration_seconds",
         "residual_compromise_count",
         "residual_compromise_score",
         "total_duration_seconds",
@@ -113,6 +144,9 @@ def main():
         "detection_check_duration_seconds": "",
         "evidence_capture": "NOT_RUN",
         "evidence_capture_duration_seconds": "",
+        "evidence_items_required": "UNKNOWN",
+        "evidence_items_captured": "UNKNOWN",
+        "evidence_completeness_percentage": "UNKNOWN",
         "quarantine": "NOT_RUN",
         "quarantine_duration_seconds": "",
         "stale_agent_cleanup": "NOT_RUN",
@@ -121,7 +155,12 @@ def main():
         "replacement_duration_seconds": "",
         "post_recovery_validation": "NOT_RUN",
         "validation_duration_seconds": "",
+        "validation_indicators_total": "UNKNOWN",
+        "validation_indicators_passed": "UNKNOWN",
+        "validation_success_percentage": "UNKNOWN",
         "monitoring_restored": "NOT_RUN",
+        "fim_realtime_ready": "NOT_RUN",
+        "monitoring_restoration_duration_seconds": "UNKNOWN",
         "residual_compromise_count": "UNKNOWN",
         "residual_compromise_score": "UNKNOWN",
         "total_duration_seconds": "",
@@ -163,6 +202,19 @@ def main():
         "PASS" if evidence["success"] else "FAIL"
     )
     row["evidence_capture_duration_seconds"] = evidence["duration"]
+
+    row["evidence_items_required"] = extract_metric(
+        evidence["stdout"],
+        "evidence_items_required",
+    )
+    row["evidence_items_captured"] = extract_metric(
+        evidence["stdout"],
+        "evidence_items_captured",
+    )
+    row["evidence_completeness_percentage"] = extract_metric(
+        evidence["stdout"],
+        "evidence_completeness_percentage",
+    )
 
     if not evidence["success"]:
         return stop_and_log(
@@ -248,14 +300,40 @@ def main():
     )
     row["validation_duration_seconds"] = validation["duration"]
 
-    if validation["success"]:
-        row["monitoring_restored"] = "PASS"
-        row["residual_compromise_count"] = "0/6"
-        row["residual_compromise_score"] = 0
-    else:
-        row["monitoring_restored"] = "FAIL"
-        row["residual_compromise_count"] = "UNKNOWN"
-        row["residual_compromise_score"] = "UNKNOWN"
+    row["validation_indicators_total"] = extract_metric(
+        validation["stdout"],
+        "validation_indicators_total",
+    )
+    row["validation_indicators_passed"] = extract_metric(
+        validation["stdout"],
+        "validation_indicators_passed",
+    )
+    row["validation_success_percentage"] = extract_metric(
+        validation["stdout"],
+        "validation_success_percentage",
+    )
+    row["monitoring_restored"] = extract_metric(
+        validation["stdout"],
+        "monitoring_restored",
+        "FAIL" if not validation["success"] else "UNKNOWN",
+    )
+    row["fim_realtime_ready"] = extract_metric(
+        validation["stdout"],
+        "fim_realtime_ready",
+        "FAIL" if not validation["success"] else "UNKNOWN",
+    )
+    row["monitoring_restoration_duration_seconds"] = extract_metric(
+        validation["stdout"],
+        "monitoring_restoration_duration_seconds",
+    )
+    row["residual_compromise_count"] = extract_metric(
+        validation["stdout"],
+        "residual_compromise_count",
+    )
+    row["residual_compromise_score"] = extract_metric(
+        validation["stdout"],
+        "residual_compromise_score",
+    )
 
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
@@ -275,9 +353,26 @@ def main():
 
     if validation["success"]:
         print("\n[SUCCESS] Full malicious systemd recovery workflow passed.")
-        print("[METRIC] residual_compromise_count = 0/6")
-        print("[METRIC] residual_compromise_score = 0")
-        print("[METRIC] monitoring_restored = PASS")
+        print(
+            "[METRIC] residual_compromise_count = "
+            f"{row['residual_compromise_count']}"
+        )
+        print(
+            "[METRIC] residual_compromise_score = "
+            f"{row['residual_compromise_score']}"
+        )
+        print(
+            "[METRIC] monitoring_restored = "
+            f"{row['monitoring_restored']}"
+        )
+        print(
+            "[METRIC] fim_realtime_ready = "
+            f"{row['fim_realtime_ready']}"
+        )
+        print(
+            "[METRIC] monitoring_restoration_duration_seconds = "
+            f"{row['monitoring_restoration_duration_seconds']}"
+        )
         print(
             f"[METRIC] total_duration_seconds = "
             f"{row['total_duration_seconds']}"

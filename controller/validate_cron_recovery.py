@@ -1,4 +1,4 @@
-﻿import time
+import time
 
 from controller.iap_helpers import run_target_command, run_wazuh_command
 
@@ -7,7 +7,7 @@ MALICIOUS_CRON = "/etc/cron.d/realtime_evil_persistence"
 PAYLOAD_LOG = "/tmp/realtime-cron.log"
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 
-WAZUH_MAX_ATTEMPTS = 12
+WAZUH_MAX_ATTEMPTS = 60
 WAZUH_WAIT_SECONDS = 15
 
 
@@ -26,6 +26,7 @@ def check_cron_artifacts():
 
 def wait_for_wazuh_restoration():
     print("[CHECK] Waiting for Wazuh monitoring restoration...")
+    restoration_start = time.time()
 
     for attempt in range(1, WAZUH_MAX_ATTEMPTS + 1):
         target_result = run_target_command(
@@ -33,6 +34,18 @@ def wait_for_wazuh_restoration():
         )
 
         target_status = target_result["stdout"].strip()
+
+        fim_result = run_target_command(
+            "sudo grep -Fq "
+            "'Real-time file integrity monitoring started.' "
+            "/var/ossec/logs/ossec.log "
+            "&& echo FIM_READY || echo FIM_NOT_READY"
+        )
+
+        fim_ready = (
+            "FIM_READY" in fim_result["stdout"]
+            and "FIM_NOT_READY" not in fim_result["stdout"]
+        )
 
         manager_result = run_wazuh_command(
             "sudo /var/ossec/bin/agent_control -l"
@@ -47,19 +60,48 @@ def wait_for_wazuh_restoration():
             f"[CHECK] Wazuh restoration attempt "
             f"{attempt}/{WAZUH_MAX_ATTEMPTS}: "
             f"local_status={target_status or 'UNKNOWN'}, "
-            f"manager_active={manager_active}"
+            f"manager_active={manager_active}, "
+            f"fim_realtime_ready={fim_ready}"
         )
 
-        if target_status == "active" and manager_active:
+        if (
+            target_status == "active"
+            and manager_active
+            and fim_ready
+        ):
+            restoration_duration = round(
+                time.time() - restoration_start,
+                2,
+            )
+
             print("[SUCCESS] Wazuh agent is active locally.")
             print("[SUCCESS] Replacement VM is active on Wazuh Manager.")
-            return True
+            print("[SUCCESS] Real-time FIM monitoring is ready.")
+            print("[METRIC] fim_realtime_ready = PASS")
+            print(
+                "[METRIC] monitoring_restoration_duration_seconds = "
+                f"{restoration_duration}"
+            )
+            return True, restoration_duration
 
         if attempt < WAZUH_MAX_ATTEMPTS:
             time.sleep(WAZUH_WAIT_SECONDS)
 
-    print("[FAIL] Wazuh monitoring was not fully restored within the wait window.")
-    return False
+    restoration_duration = round(
+        time.time() - restoration_start,
+        2,
+    )
+
+    print(
+        "[FAIL] Wazuh monitoring and real-time FIM were not "
+        "fully restored within the wait window."
+    )
+    print("[METRIC] fim_realtime_ready = FAIL")
+    print(
+        "[METRIC] monitoring_restoration_duration_seconds = "
+        f"{restoration_duration}"
+    )
+    return False, restoration_duration
 
 
 def main():
@@ -92,8 +134,25 @@ def main():
         residual_indicators += 1
 
     total_indicators = 2
+    passed_indicators = total_indicators - residual_indicators
+    validation_success_percentage = round(
+        (passed_indicators / total_indicators) * 100,
+        2,
+    )
     residual_score = residual_indicators / total_indicators
 
+    print(
+        "[METRIC] validation_indicators_total = "
+        f"{total_indicators}"
+    )
+    print(
+        "[METRIC] validation_indicators_passed = "
+        f"{passed_indicators}"
+    )
+    print(
+        "[METRIC] validation_success_percentage = "
+        f"{validation_success_percentage}"
+    )
     print(
         f"[METRIC] residual_compromise_count = "
         f"{residual_indicators}/{total_indicators}"
@@ -104,7 +163,10 @@ def main():
         print("[FAIL] Cron persistence indicators remain after recovery.")
         return 1
 
-    monitoring_restored = wait_for_wazuh_restoration()
+    (
+        monitoring_restored,
+        monitoring_restoration_duration,
+    ) = wait_for_wazuh_restoration()
 
     if not monitoring_restored:
         return 1

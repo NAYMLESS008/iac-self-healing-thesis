@@ -1,4 +1,4 @@
-import json
+﻿import json
 import subprocess
 import time
 from pathlib import Path
@@ -18,14 +18,9 @@ TARGET_HOST = "thesis-self-healing-vm"
 TARGET_USER = "thesisadmin"
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 
-SERVICE_NAME = "thesis-persistence.service"
-SERVICE_FILE = (
-    "/etc/systemd/system/thesis-persistence.service"
-)
-SCRIPT_FILE = "/usr/local/bin/thesis-persistence.sh"
-HEARTBEAT_FILE = (
-    "/var/tmp/thesis-systemd-heartbeat.log"
-)
+PORT = 4444
+PID_FILE = "/var/tmp/thesis-unexpected-listener.pid"
+LOG_FILE = "/var/tmp/thesis-unexpected-listener.log"
 
 WAZUH_MAX_ATTEMPTS = 60
 WAZUH_WAIT_SECONDS = 15
@@ -33,7 +28,7 @@ WAZUH_WAIT_SECONDS = 15
 
 def get_current_private_key():
     state = json.loads(
-        STATE_FILE.read_text(encoding="utf-8")
+        STATE_FILE.read_text(encoding="utf-8-sig")
     )
 
     private_key = Path(state["new_private_key"])
@@ -116,34 +111,29 @@ def run_target_command(command):
     }
 
 
-def check_systemd_artifacts():
+def check_listener_artifacts():
     command = (
-        f"if test -f {SERVICE_FILE}; "
-        "then echo SERVICE_FILE_PRESENT; "
-        "else echo SERVICE_FILE_ABSENT; fi; "
-
-        f"if test -f {SCRIPT_FILE}; "
-        "then echo SCRIPT_FILE_PRESENT; "
-        "else echo SCRIPT_FILE_ABSENT; fi; "
-
-        f"if sudo systemctl is-enabled --quiet {SERVICE_NAME}; "
-        "then echo SERVICE_ENABLED; "
-        "else echo SERVICE_NOT_ENABLED; fi; "
-
-        f"if sudo systemctl is-active --quiet {SERVICE_NAME}; "
-        "then echo SERVICE_ACTIVE; "
-        "else echo SERVICE_NOT_ACTIVE; fi; "
+        f"if ss -H -lnt 'sport = :{PORT}' | grep -q .; "
+        "then echo PORT_PRESENT; "
+        "else echo PORT_ABSENT; fi; "
 
         "if ps -eo comm=,args= | "
-        "awk '$1 == \"bash\" && "
-        "$2 == \"/usr/local/bin/thesis-persistence.sh\" "
+        "awk '$1 == \"python3\" && "
+        "$2 == \"python3\" && "
+        "$3 == \"-m\" && "
+        "$4 == \"http.server\" && "
+        f"$5 == \"{PORT}\" "
         "{found=1} END {exit !found}'; "
         "then echo PROCESS_PRESENT; "
         "else echo PROCESS_ABSENT; fi; "
 
-        f"if test -f {HEARTBEAT_FILE}; "
-        "then echo HEARTBEAT_PRESENT; "
-        "else echo HEARTBEAT_ABSENT; fi"
+        f"if test -f {PID_FILE}; "
+        "then echo PID_FILE_PRESENT; "
+        "else echo PID_FILE_ABSENT; fi; "
+
+        f"if test -f {LOG_FILE}; "
+        "then echo LOG_FILE_PRESENT; "
+        "else echo LOG_FILE_ABSENT; fi"
     )
 
     return run_target_command(command)
@@ -246,12 +236,13 @@ def wait_for_wazuh_restoration():
 
     return False, restoration_duration
 
+
 def main():
     print(
-        "[START] Validating systemd persistence recovery"
+        "[START] Validating unexpected-listener recovery"
     )
 
-    result = check_systemd_artifacts()
+    result = check_listener_artifacts()
 
     if result["stdout"]:
         print(result["stdout"])
@@ -261,12 +252,10 @@ def main():
         print(result["stderr"])
 
     required_absent_markers = [
-        "SERVICE_FILE_ABSENT",
-        "SCRIPT_FILE_ABSENT",
-        "SERVICE_NOT_ENABLED",
-        "SERVICE_NOT_ACTIVE",
+        "PORT_ABSENT",
         "PROCESS_ABSENT",
-        "HEARTBEAT_ABSENT",
+        "PID_FILE_ABSENT",
+        "LOG_FILE_ABSENT",
     ]
 
     residual_indicators = sum(
@@ -276,11 +265,6 @@ def main():
 
     total_indicators = len(
         required_absent_markers
-    )
-
-    residual_score = (
-        residual_indicators
-        / total_indicators
     )
 
     validation_indicators_passed = (
@@ -296,6 +280,11 @@ def main():
         2,
     )
 
+    residual_score = (
+        residual_indicators
+        / total_indicators
+    )
+
     print(
         "[METRIC] validation_indicators_total = "
         f"{total_indicators}"
@@ -308,7 +297,6 @@ def main():
         "[METRIC] validation_success_percentage = "
         f"{validation_success_percentage}"
     )
-
     print(
         "[METRIC] residual_compromise_count = "
         f"{residual_indicators}/{total_indicators}"
@@ -320,9 +308,11 @@ def main():
 
     if residual_indicators != 0:
         print(
-            "[FAIL] Systemd persistence indicators "
+            "[FAIL] Unexpected-listener indicators "
             "remain after recovery."
         )
+        print("[METRIC] monitoring_restored = FAIL")
+        print("[METRIC] fim_realtime_ready = NOT_RUN")
         return 1
 
     monitoring_restored, _ = (
@@ -331,11 +321,12 @@ def main():
 
     if not monitoring_restored:
         print("[METRIC] monitoring_restored = FAIL")
+        print("[RESULT] FAIL")
         return 1
 
     print(
-        "[SUCCESS] Malicious systemd persistence "
-        "is absent."
+        "[SUCCESS] Unexpected listener and its "
+        "artifacts are absent."
     )
     print("[METRIC] monitoring_restored = PASS")
     print("[RESULT] PASS")
