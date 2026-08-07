@@ -4,7 +4,6 @@ ssh_key_recovery_orchestrator_results.csv,2,2026-07-16T23:10:53,ssh_key_persiste
 ssh_key_recovery_orchestrator_results.csv,3,2026-07-16T23:35:04,ssh_key_persistence,FAIL,257.36,"Development, failed-trigger or failed workflow run."
 ssh_key_recovery_orchestrator_results.csv,4,2026-07-17T00:12:05,ssh_key_persistence,NO_RECOVERY_TRIGGERED,13.75,"Development, failed-trigger or failed workflow run."
 ssh_key_recovery_orchestrator_results.csv,5,2026-07-17T00:33:29,ssh_key_persistence,PASS,551.78,Initial successful pilot run.
-local_user_recovery_orchestrator_results.csv,2,2026-07-20T20:55:53+00:00,unauthorized_local_user,FAILED_REPLACEMENT_RECOVERY,317.93,"Development, debugging or failed workflow run; not used for recovery-time performance statistics."
 ssh_key_recovery_orchestrator_results.csv,6,2026-07-20T23:01:56,ssh_key_persistence,NO_RECOVERY_TRIGGERED,14.97,"Development, failed-trigger or failed workflow run."
 ssh_key_recovery_orchestrator_results.csv,7,2026-07-20T23:16:02,ssh_key_persistence,PASS,319.5,Superseded by the standardized five-run SSH public-key dataset.
 ssh_key_recovery_orchestrator_results.csv,8,2026-07-20T23:28:31,ssh_key_persistence,PASS,347.86,Superseded by the standardized five-run SSH public-key dataset.

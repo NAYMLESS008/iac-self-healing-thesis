@@ -113,15 +113,27 @@ def main():
 
     evidence_file.write_text(evidence_text, encoding="utf-8")
 
+    identity_captured = (
+        identity_result["return_code"] == 0
+        and bool(identity_result["stdout"].strip())
+    )
+
     user_captured = (
         user_result["return_code"] == 0
         and "USER_MISSING" not in user_result["stdout"]
         and BACKDOOR_USER in user_result["stdout"]
     )
 
-    sudo_membership_captured = (
+    group_membership_captured = (
         group_result["return_code"] == 0
+        and "USER_MISSING" not in group_result["stdout"]
         and "sudo" in group_result["stdout"].split()
+    )
+
+    home_metadata_captured = (
+        home_result["return_code"] == 0
+        and "HOME_DIRECTORY_MISSING" not in home_result["stdout"]
+        and bool(home_result["stdout"].strip())
     )
 
     passwd_captured = (
@@ -134,22 +146,58 @@ def main():
         and f"{BACKDOOR_USER}:" in shadow_result["stdout"]
     )
 
+    sudo_group_captured = (
+        sudo_result["return_code"] == 0
+        and BACKDOOR_USER in sudo_result["stdout"]
+    )
+
     wazuh_captured = (
         wazuh_result["return_code"] == 0
         and '"id":"5902"' in wazuh_result["stdout"]
         and BACKDOOR_USER in wazuh_result["stdout"]
     )
 
-    if not all(
-        [
-            identity_result["return_code"] == 0,
-            user_captured,
-            sudo_membership_captured,
-            passwd_captured,
-            shadow_captured,
-            wazuh_captured,
-        ]
-    ):
+    evidence_checks = {
+        "target_identity": identity_captured,
+        "user_account_details": user_captured,
+        "group_membership": group_membership_captured,
+        "home_directory_metadata": home_metadata_captured,
+        "passwd_entry": passwd_captured,
+        "shadow_entry": shadow_captured,
+        "sudo_group_entry": sudo_group_captured,
+        "wazuh_alert": wazuh_captured,
+    }
+
+    evidence_items_required = len(evidence_checks)
+    evidence_items_captured = sum(evidence_checks.values())
+
+    evidence_completeness_percentage = round(
+        (
+            evidence_items_captured
+            / evidence_items_required
+        )
+        * 100,
+        2,
+    )
+
+    print(
+        "[METRIC] evidence_items_required = "
+        f"{evidence_items_required}"
+    )
+    print(
+        "[METRIC] evidence_items_captured = "
+        f"{evidence_items_captured}"
+    )
+    print(
+        "[METRIC] evidence_completeness_percentage = "
+        f"{evidence_completeness_percentage}"
+    )
+
+    for item_name, captured in evidence_checks.items():
+        status = "PASS" if captured else "FAIL"
+        print(f"[EVIDENCE] {item_name} = {status}")
+
+    if evidence_items_captured != evidence_items_required:
         print("[FAIL] Unauthorized-user evidence capture incomplete.")
         print(f"[INFO] Partial evidence saved to: {evidence_file}")
         return 1

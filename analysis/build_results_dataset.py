@@ -24,7 +24,7 @@ STANDARD_FILES = {
         "label": "Malicious cron persistence",
         "quality": "FORMAL_REPEATED",
     },
-    "local_user_recovery_orchestrator_results.csv": {
+    "local_user_recovery_formal_results.csv": {
         "label": "Unauthorized local user",
         "quality": "FORMAL_REPEATED",
     },
@@ -67,6 +67,9 @@ MASTER_FIELDS = [
     "detection_check_duration_seconds",
     "evidence_capture",
     "evidence_capture_duration_seconds",
+    "evidence_items_required",
+    "evidence_items_captured",
+    "evidence_completeness_percentage",
     "quarantine",
     "quarantine_duration_seconds",
     "stale_agent_cleanup",
@@ -77,7 +80,12 @@ MASTER_FIELDS = [
     "replacement_duration_seconds",
     "post_recovery_validation",
     "validation_duration_seconds",
+    "validation_indicators_total",
+    "validation_indicators_passed",
+    "validation_success_percentage",
     "monitoring_restored",
+    "fim_realtime_ready",
+    "monitoring_restoration_duration_seconds",
     "new_key_success",
     "old_key_denied",
     "residual_compromise_count",
@@ -181,6 +189,18 @@ def normalise_standard_row(
             "evidence_capture_duration_seconds",
             "",
         ),
+        "evidence_items_required": row.get(
+            "evidence_items_required",
+            "NOT_RECORDED",
+        ),
+        "evidence_items_captured": row.get(
+            "evidence_items_captured",
+            "NOT_RECORDED",
+        ),
+        "evidence_completeness_percentage": row.get(
+            "evidence_completeness_percentage",
+            "NOT_RECORDED",
+        ),
         "quarantine": row.get(
             "quarantine",
             "NOT_RECORDED",
@@ -215,10 +235,30 @@ def normalise_standard_row(
             "validation_duration_seconds",
             "",
         ),
+        "validation_indicators_total": row.get(
+            "validation_indicators_total",
+            "NOT_RECORDED",
+        ),
+        "validation_indicators_passed": row.get(
+            "validation_indicators_passed",
+            "NOT_RECORDED",
+        ),
+        "validation_success_percentage": row.get(
+            "validation_success_percentage",
+            "NOT_RECORDED",
+        ),
         "monitoring_restored": row.get(
             "monitoring_restored",
             "NOT_RECORDED",
         ) or "NOT_RECORDED",
+        "fim_realtime_ready": row.get(
+            "fim_realtime_ready",
+            "NOT_RECORDED",
+        ) or "NOT_RECORDED",
+        "monitoring_restoration_duration_seconds": row.get(
+            "monitoring_restoration_duration_seconds",
+            "",
+        ),
         "new_key_success": "NOT_APPLICABLE",
         "old_key_denied": "NOT_APPLICABLE",
         "residual_compromise_count": row.get(
@@ -738,9 +778,7 @@ def main():
         excluded_rows,
     )
 
-    summary_rows = build_summary(
-        main_rows + supplementary_rows
-    )
+    summary_rows = build_summary(main_rows)
 
     summary_fields = [
         "category",
@@ -769,31 +807,37 @@ def main():
 
     readme = """RESULTS DATASET CLASSIFICATION
 
-The original CSV files were preserved unchanged.
-
-Included main dataset:
+Primary thesis dataset:
 - Five unauthorized SSH public-key persistence runs.
 - Five unauthorized local-user persistence runs.
 - Five malicious cron persistence runs.
 - Five malicious systemd persistence runs.
 - Five unexpected TCP-listener runs.
+- Total primary runs: 25.
 
-Included supplementary dataset:
-- Two stolen trusted SSH private-key recovery runs.
+All 25 primary runs completed the final defined workflow with PASS.
 
-Exclusions:
-- Failed detection/trigger attempts.
-- Evidence-capture implementation failures.
-- Stale-agent cleanup failures.
-- Infrastructure or Terraform replacement failures.
-- Validator false positives and target-check implementation failures.
-- The first successful SSH-key persistence run, classified as a pilot before
-  the five-run formal series.
+Historical supplementary data:
+- Two stolen trusted SSH private-key recovery runs are preserved in
+  included_supplementary_results.csv.
+- The stolen-key experiment is outside the final thesis scope and is excluded
+  from thesis-facing summaries, tables, figures, and the primary success rate.
 
-All five primary persistence scenarios contain five included formal runs.
+Archived outside-protocol data:
+- One additional successful cron execution from 2026-08-06 is preserved in
+  results/archive but is not part of the predefined five-run cron series.
 
-The stolen-private-key experiment is supplementary because it evaluates
-credential compromise and rotation in addition to host replacement.
+Excluded development data:
+- Development, debugging, failed-trigger, failed-evidence, transport,
+  validation, and superseded-protocol attempts are retained separately in
+  excluded_development_runs.csv.
+
+Interpretation:
+- The primary dataset uses five repetitions for each of the five selected
+  persistence scenarios.
+- Results are analysed descriptively using success outcomes, evidence
+  completeness, residual indicators, monitoring restoration, stage durations,
+  total workflow duration, and run-to-run variability.
 """
 
     README_OUTPUT.write_text(

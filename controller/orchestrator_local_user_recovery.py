@@ -8,11 +8,11 @@ from pathlib import Path
 from controller.alert_state import mark_selected_alert_processed
 
 
-RESULTS_FILE = Path(
-    "results/local_user_recovery_orchestrator_results.csv"
-)
-
 SCENARIO = "unauthorized_local_user"
+
+RESULTS_FILE = Path(
+    "results/local_user_recovery_formal_results.csv"
+)
 
 FIELDNAMES = [
     "timestamp_utc",
@@ -21,6 +21,9 @@ FIELDNAMES = [
     "detection_check_duration_seconds",
     "evidence_capture",
     "evidence_capture_duration_seconds",
+    "evidence_items_required",
+    "evidence_items_captured",
+    "evidence_completeness_percentage",
     "quarantine",
     "quarantine_duration_seconds",
     "stale_agent_cleanup",
@@ -29,7 +32,12 @@ FIELDNAMES = [
     "replacement_duration_seconds",
     "post_recovery_validation",
     "validation_duration_seconds",
+    "validation_indicators_total",
+    "validation_indicators_passed",
+    "validation_success_percentage",
     "monitoring_restored",
+    "fim_realtime_ready",
+    "monitoring_restoration_duration_seconds",
     "residual_compromise_count",
     "residual_compromise_score",
     "total_duration_seconds",
@@ -37,239 +45,280 @@ FIELDNAMES = [
 ]
 
 
-def run_step(description, module_name):
-    print(f"\n[STEP] {description}")
-
+def run_module(module_name):
     start = time.perf_counter()
 
     result = subprocess.run(
         [sys.executable, "-m", module_name],
-        text=True
+        capture_output=True,
+        text=True,
     )
 
-    duration = round(time.perf_counter() - start, 2)
-
-    if result.returncode == 0:
-        print(
-            f"\n[OK] {description} completed in "
-            f"{duration} seconds."
-        )
-        return True, duration
-
-    print(
-        f"\n[FAIL] {description} failed in "
-        f"{duration} seconds."
+    duration = round(
+        time.perf_counter() - start,
+        2,
     )
-    return False, duration
 
+    if result.stdout:
+        print(result.stdout)
 
-def create_result_row():
+    if result.stderr:
+        print("[STDERR]")
+        print(result.stderr)
+
     return {
-        "timestamp_utc": datetime.now(
-            timezone.utc
-        ).isoformat(timespec="seconds"),
-        "scenario": SCENARIO,
-        "wazuh_detection": "NOT_RUN",
-        "detection_check_duration_seconds": "",
-        "evidence_capture": "NOT_RUN",
-        "evidence_capture_duration_seconds": "",
-        "quarantine": "NOT_RUN",
-        "quarantine_duration_seconds": "",
-        "stale_agent_cleanup": "NOT_RUN",
-        "stale_agent_cleanup_duration_seconds": "",
-        "replacement_recovery": "NOT_RUN",
-        "replacement_duration_seconds": "",
-        "post_recovery_validation": "NOT_RUN",
-        "validation_duration_seconds": "",
-        "monitoring_restored": "NOT_RUN",
-        "residual_compromise_count": "UNKNOWN",
-        "residual_compromise_score": "UNKNOWN",
-        "total_duration_seconds": "",
-        "final_result": "NOT_COMPLETED",
+        "success": result.returncode == 0,
+        "duration": duration,
+        "output": result.stdout,
     }
 
 
-def write_result(row):
+def get_metric(output, name):
+    prefix = f"[METRIC] {name} = "
+
+    for line in output.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix):].strip()
+
+    return "UNKNOWN"
+
+
+def save_result(row):
     RESULTS_FILE.parent.mkdir(exist_ok=True)
 
-    file_exists = RESULTS_FILE.exists()
+    new_file = not RESULTS_FILE.exists()
 
     with RESULTS_FILE.open(
         "a",
         newline="",
-        encoding="utf-8"
-    ) as csv_file:
+        encoding="utf-8",
+    ) as file:
         writer = csv.DictWriter(
-            csv_file,
-            fieldnames=FIELDNAMES
+            file,
+            fieldnames=FIELDNAMES,
         )
 
-        if not file_exists:
+        if new_file:
             writer.writeheader()
 
         writer.writerow(row)
 
 
-def stop_and_log(result_name, row, workflow_start):
-    total_duration = round(
+def finish(row, workflow_start, final_result):
+    row["total_duration_seconds"] = round(
         time.perf_counter() - workflow_start,
-        2
+        2,
     )
 
-    row["total_duration_seconds"] = total_duration
-    row["final_result"] = result_name
+    row["final_result"] = final_result
 
-    write_result(row)
+    save_result(row)
 
-    print(f"\n[STOP] {result_name}")
+    print(f"\n[RESULT] {final_result}")
     print(
-        f"[METRIC] total_duration_seconds = "
-        f"{total_duration}"
+        "[METRIC] total_duration_seconds = "
+        f"{row['total_duration_seconds']}"
     )
 
-    return 1
+    return 0 if final_result == "PASS" else 1
 
 
 def main():
-    print("====================================================")
-    print(" Starting unauthorized local-user recovery workflow ")
-    print("====================================================")
+    print("==============================================")
+    print(" Unauthorized local-user recovery workflow")
+    print("==============================================")
 
     workflow_start = time.perf_counter()
-    row = create_result_row()
 
-    success, duration = run_step(
-        "Wazuh detection and active-user confirmation",
+    row = {
+        field: "NOT_RUN"
+        for field in FIELDNAMES
+    }
+
+    row["timestamp_utc"] = datetime.now(
+        timezone.utc
+    ).isoformat(timespec="seconds")
+
+    row["scenario"] = SCENARIO
+
+    # 1. Detect alert and confirm the malicious user still exists
+    print("\n[STEP 1] Detection and active compromise confirmation")
+
+    detection = run_module(
         "controller.wazuh_local_user_alert_check"
     )
 
-    row["wazuh_detection"] = "PASS" if success else "FAIL"
-    row["detection_check_duration_seconds"] = duration
+    row["wazuh_detection"] = (
+        "PASS" if detection["success"] else "FAIL"
+    )
 
-    if not success:
-        return stop_and_log(
-            "NO_RECOVERY_TRIGGERED",
+    row["detection_check_duration_seconds"] = (
+        detection["duration"]
+    )
+
+    if not detection["success"]:
+        return finish(
             row,
-            workflow_start
+            workflow_start,
+            "NO_RECOVERY_TRIGGERED",
         )
 
-    success, duration = run_step(
-        "Evidence capture before replacement",
+    # 2. Capture evidence before destroying the VM
+    print("\n[STEP 2] Evidence capture")
+
+    evidence = run_module(
         "controller.capture_local_user_evidence"
     )
 
-    row["evidence_capture"] = "PASS" if success else "FAIL"
-    row["evidence_capture_duration_seconds"] = duration
+    row["evidence_capture"] = (
+        "PASS" if evidence["success"] else "FAIL"
+    )
 
-    if not success:
-        return stop_and_log(
-            "FAILED_EVIDENCE_CAPTURE",
+    row["evidence_capture_duration_seconds"] = (
+        evidence["duration"]
+    )
+
+    row["evidence_items_required"] = get_metric(
+        evidence["output"],
+        "evidence_items_required",
+    )
+
+    row["evidence_items_captured"] = get_metric(
+        evidence["output"],
+        "evidence_items_captured",
+    )
+
+    row["evidence_completeness_percentage"] = get_metric(
+        evidence["output"],
+        "evidence_completeness_percentage",
+    )
+
+    if not evidence["success"]:
+        return finish(
             row,
-            workflow_start
+            workflow_start,
+            "FAILED_EVIDENCE_CAPTURE",
         )
 
-    success, duration = run_step(
-        "Quarantine compromised target VM",
+    # 3. Stop the compromised VM
+    print("\n[STEP 3] Quarantine")
+
+    quarantine = run_module(
         "controller.quarantine_target"
     )
 
-    row["quarantine"] = "PASS" if success else "FAIL"
-    row["quarantine_duration_seconds"] = duration
+    row["quarantine"] = (
+        "PASS" if quarantine["success"] else "FAIL"
+    )
 
-    if not success:
-        return stop_and_log(
-            "FAILED_QUARANTINE",
+    row["quarantine_duration_seconds"] = (
+        quarantine["duration"]
+    )
+
+    if not quarantine["success"]:
+        return finish(
             row,
-            workflow_start
+            workflow_start,
+            "FAILED_QUARANTINE",
         )
 
-    success, duration = run_step(
-        "Remove stale Wazuh agent registration",
+    # 4. Remove the old Wazuh agent registration
+    print("\n[STEP 4] Remove stale Wazuh agent")
+
+    cleanup = run_module(
         "controller.remove_stale_wazuh_agent"
     )
 
     row["stale_agent_cleanup"] = (
-        "PASS" if success else "FAIL"
+        "PASS" if cleanup["success"] else "FAIL"
     )
-    row["stale_agent_cleanup_duration_seconds"] = duration
 
-    if not success:
-        return stop_and_log(
-            "FAILED_STALE_AGENT_CLEANUP",
+    row["stale_agent_cleanup_duration_seconds"] = (
+        cleanup["duration"]
+    )
+
+    if not cleanup["success"]:
+        return finish(
             row,
-            workflow_start
+            workflow_start,
+            "FAILED_STALE_AGENT_CLEANUP",
         )
 
-    success, duration = run_step(
-        "Terraform replacement recovery",
+    # 5. Replace the VM using Terraform
+    print("\n[STEP 5] Terraform replacement")
+
+    replacement = run_module(
         "controller.recover_replace"
     )
 
     row["replacement_recovery"] = (
-        "PASS" if success else "FAIL"
+        "PASS" if replacement["success"] else "FAIL"
     )
-    row["replacement_duration_seconds"] = duration
 
-    if not success:
-        return stop_and_log(
-            "FAILED_REPLACEMENT_RECOVERY",
+    row["replacement_duration_seconds"] = (
+        replacement["duration"]
+    )
+
+    if not replacement["success"]:
+        return finish(
             row,
-            workflow_start
+            workflow_start,
+            "FAILED_REPLACEMENT_RECOVERY",
         )
 
-    success, duration = run_step(
-        "Post-recovery local-user and monitoring validation",
+    # 6. Check that the malicious user is gone
+    #    and Wazuh/FIM monitoring is restored
+    print("\n[STEP 6] Post-recovery validation")
+
+    validation = run_module(
         "controller.validate_local_user_recovery"
     )
 
     row["post_recovery_validation"] = (
-        "PASS" if success else "FAIL"
+        "PASS" if validation["success"] else "FAIL"
     )
-    row["validation_duration_seconds"] = duration
 
-    if not success:
-        row["monitoring_restored"] = "FAIL"
+    row["validation_duration_seconds"] = (
+        validation["duration"]
+    )
 
-        return stop_and_log(
+    metric_names = [
+        "validation_indicators_total",
+        "validation_indicators_passed",
+        "validation_success_percentage",
+        "monitoring_restored",
+        "fim_realtime_ready",
+        "monitoring_restoration_duration_seconds",
+        "residual_compromise_count",
+        "residual_compromise_score",
+    ]
+
+    for name in metric_names:
+        row[name] = get_metric(
+            validation["output"],
+            name,
+        )
+
+    if not validation["success"]:
+        return finish(
+            row,
+            workflow_start,
             "FAILED_POST_RECOVERY_VALIDATION",
-            row,
-            workflow_start
         )
 
-    row["monitoring_restored"] = "PASS"
-    row["residual_compromise_count"] = "0/3"
-    row["residual_compromise_score"] = "0"
-
+    # Mark this alert as processed only after full recovery
     if not mark_selected_alert_processed(SCENARIO):
-        return stop_and_log(
-            "FAILED_ALERT_STATE_UPDATE",
+        return finish(
             row,
-            workflow_start
+            workflow_start,
+            "FAILED_ALERT_STATE_UPDATE",
         )
 
-    total_duration = round(
-        time.perf_counter() - workflow_start,
-        2
+    return finish(
+        row,
+        workflow_start,
+        "PASS",
     )
-
-    row["total_duration_seconds"] = total_duration
-    row["final_result"] = "PASS"
-
-    write_result(row)
-
-    print(
-        "\n[SUCCESS] Full unauthorized local-user "
-        "recovery workflow passed."
-    )
-    print("[METRIC] residual_compromise_count = 0/3")
-    print("[METRIC] residual_compromise_score = 0")
-    print("[METRIC] monitoring_restored = PASS")
-    print(
-        f"[METRIC] total_duration_seconds = "
-        f"{total_duration}"
-    )
-
-    return 0
 
 
 if __name__ == "__main__":

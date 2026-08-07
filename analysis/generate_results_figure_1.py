@@ -58,7 +58,6 @@ def main():
     )
 
     rows = read_rows(MAIN_FILE)
-    rows.extend(read_rows(SUPPLEMENTARY_FILE))
 
     durations_by_scenario = {
         scenario: []

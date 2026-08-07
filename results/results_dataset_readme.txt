@@ -1,27 +1,33 @@
 RESULTS DATASET CLASSIFICATION
 
-The original CSV files were preserved unchanged.
-
-Included main dataset:
+Primary thesis dataset:
 - Five unauthorized SSH public-key persistence runs.
 - Five unauthorized local-user persistence runs.
 - Five malicious cron persistence runs.
 - Five malicious systemd persistence runs.
 - Five unexpected TCP-listener runs.
+- Total primary runs: 25.
 
-Included supplementary dataset:
-- Two stolen trusted SSH private-key recovery runs.
+All 25 primary runs completed the final defined workflow with PASS.
 
-Exclusions:
-- Failed detection/trigger attempts.
-- Evidence-capture implementation failures.
-- Stale-agent cleanup failures.
-- Infrastructure or Terraform replacement failures.
-- Validator false positives and target-check implementation failures.
-- The first successful SSH-key persistence run, classified as a pilot before
-  the five-run formal series.
+Historical supplementary data:
+- Two stolen trusted SSH private-key recovery runs are preserved in
+  included_supplementary_results.csv.
+- The stolen-key experiment is outside the final thesis scope and is excluded
+  from thesis-facing summaries, tables, figures, and the primary success rate.
 
-All five primary persistence scenarios contain five included formal runs.
+Archived outside-protocol data:
+- One additional successful cron execution from 2026-08-06 is preserved in
+  results/archive but is not part of the predefined five-run cron series.
 
-The stolen-private-key experiment is supplementary because it evaluates
-credential compromise and rotation in addition to host replacement.
+Excluded development data:
+- Development, debugging, failed-trigger, failed-evidence, transport,
+  validation, and superseded-protocol attempts are retained separately in
+  excluded_development_runs.csv.
+
+Interpretation:
+- The primary dataset uses five repetitions for each of the five selected
+  persistence scenarios.
+- Results are analysed descriptively using success outcomes, evidence
+  completeness, residual indicators, monitoring restoration, stage durations,
+  total workflow duration, and run-to-run variability.
