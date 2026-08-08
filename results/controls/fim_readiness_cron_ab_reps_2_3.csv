@@ -1,0 +1,3 @@
+repetition,agent_active_seconds,fim_ready_seconds,active_to_fim_ready_gap_seconds,condition_a_attack_before_fim_ready,condition_a_alert,condition_a_alert_delay_seconds,condition_b_alert,condition_b_alert_delay_seconds,result
+2,25.09,512.48,487.39,YES,YES,469.365,YES,0.009,VALID
+3,19.88,514.98,495.1,YES,YES,488.651,YES,0.008,VALID
