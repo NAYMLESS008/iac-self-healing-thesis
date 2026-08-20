@@ -12,37 +12,30 @@
 attacks/attacker_key
 attacks/attacker_key.pub
 
-# Temporary/evidence files
+# Controller runtime state
+controller/processed_alerts.json
+controller/selected_alerts.json
+controller/ssh_rotation_state.json
+
+# Temporary/evidence/runtime files
 *.tmp
 *.log
 thesis-results/
 evidence/
 .env
 
+# Python / virtual environments
+__pycache__/
+*.pyc
+.venv/
+.venv-*/
+
+# Development backups
+*.pre_*_backup
+*.pre_*_backup.*
+results/*.pre_*.csv
+
 # OS/editor files
 .DS_Store
 Thumbs.db
 .vscode/
-
-# Python cache files
-__pycache__/
-*.pyc
-
-# Controller runtime state
-controller/processed_alerts.json
-controller/ssh_rotation_state.json
-
-# Development backups
-*.pre_*_backup
-*.pre_*_backup.*
-
-# Controller runtime state
-controller/processed_alerts.json
-controller/ssh_rotation_state.json
-
-# Development backups
-*.pre_*_backup
-*.pre_*_backup.*
-
-# Results backup files
-results/*.pre_*.csv
