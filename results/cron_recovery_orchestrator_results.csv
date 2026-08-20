@@ -1,0 +1,7 @@
+timestamp_utc,scenario,wazuh_detection,detection_check_duration_seconds,evidence_capture,evidence_capture_duration_seconds,quarantine,quarantine_duration_seconds,stale_agent_cleanup,stale_agent_cleanup_duration_seconds,replacement_recovery,replacement_duration_seconds,post_recovery_validation,validation_duration_seconds,monitoring_restored,residual_compromise_count,residual_compromise_score,total_duration_seconds,final_result
+2026-07-18T21:31:29+00:00,malicious_cron_persistence,PASS,17.87,FAIL,8.61,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,UNKNOWN,UNKNOWN,26.49,FAILED_EVIDENCE_CAPTURE
+2026-07-18T21:38:50+00:00,malicious_cron_persistence,PASS,17.33,PASS,47.45,PASS,62.62,PASS,47.87,PASS,257.68,FAIL,11.65,FAIL,UNKNOWN,UNKNOWN,444.61,FAIL
+2026-07-18T22:03:02+00:00,malicious_cron_persistence,PASS,16.51,PASS,46.51,PASS,62.77,FAIL,18.04,NOT_RUN,,NOT_RUN,,NOT_RUN,UNKNOWN,UNKNOWN,143.82,FAILED_STALE_AGENT_CLEANUP
+2026-07-18T22:33:15+00:00,malicious_cron_persistence,FAIL,8.41,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,UNKNOWN,UNKNOWN,8.41,NO_RECOVERY_TRIGGERED
+2026-07-18T22:42:57+00:00,malicious_cron_persistence,FAIL,8.64,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,,NOT_RUN,UNKNOWN,UNKNOWN,8.64,NO_RECOVERY_TRIGGERED
+2026-07-18T22:46:38+00:00,malicious_cron_persistence,PASS,17.44,PASS,44.7,PASS,67.09,PASS,53.21,PASS,88.83,PASS,73.08,PASS,0/2,0,344.36,PASS

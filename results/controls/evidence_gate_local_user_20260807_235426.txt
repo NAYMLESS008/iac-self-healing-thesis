@@ -1,0 +1,62 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260807235426
+Username: LYRA\nayml
+RunAs User: LYRA\nayml
+Configuration Name: 
+Machine: LYRA (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -noexit -command try { . "c:\Users\nayml\AppData\Local\Programs\Microsoft VS Code\df53daabb1\resources\app\out\vs\workbench\contrib\terminal\common\scripts\shellIntegration.ps1" } catch {}
+Process ID: 21344
+PSVersion: 5.1.26100.8875
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8875
+BuildVersion: 10.0.26100.8875
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is .\results\controls\evidence_gate_local_user_20260807_235426.txt
+
+========================================
+ EVIDENCE-GATE CONTROL — LOCAL USER
+========================================
+VM before: 3694059180565195413
+
+
+
+
+=== MAKE EVIDENCE DESTINATION UNAVAILABLE ===
+
+=== RUN ORCHESTRATOR ===
+
+Orchestrator exit code: 1
+
+=== RESTORE EVIDENCE DIRECTORY ===
+
+=== VERIFY VM WAS NOT QUARANTINED/REPLACED ===
+VM after ID: 3694059180565195413
+VM status:   RUNNING
+
+=== LAST CONTROL RESULT ROW ===
+
+
+timestamp_utc        : 2026-08-07T22:55:43+00:00
+evidence_capture     : FAIL
+quarantine           : NOT_RUN
+replacement_recovery : NOT_RUN
+final_result         : FAILED_EVIDENCE_CAPTURE
+
+
+
+
+=== CONTROL RESULT ===
+[PASS] EVIDENCE-GATE CONTROL PASSED
+Evidence failure stopped recovery before destructive action.
+
+Control log:
+.\results\controls\evidence_gate_local_user_20260807_235426.txt
+**********************
+Windows PowerShell transcript end
+End time: 20260807235609
+**********************

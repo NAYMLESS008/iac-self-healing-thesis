@@ -1,0 +1,9 @@
+stage,column,n,mean,median,minimum,maximum,sd
+Detection and active confirmation,detection_check_duration_seconds,25,19.55,18.01,15.57,31.67,3.57
+Evidence capture,evidence_capture_duration_seconds,25,38.58,47.12,13.28,80.29,19.52
+Quarantine,quarantine_duration_seconds,25,75.64,75.57,63.49,87.92,6.77
+Stale Wazuh agent cleanup,stale_agent_cleanup_duration_seconds,25,64.55,66.58,41.51,84.83,10.1
+IaC replacement,replacement_duration_seconds,25,125.97,121.36,74.12,197.11,28.05
+Post-recovery validation,validation_duration_seconds,25,581.53,683.37,33.14,788.47,233.57
+Monitoring restoration (nested inside validation),monitoring_restoration_duration_seconds,25,569.49,671.37,21.31,768.19,233.81
+Total workflow,total_duration_seconds,25,905.82,998.99,345.31,1162.23,238.37

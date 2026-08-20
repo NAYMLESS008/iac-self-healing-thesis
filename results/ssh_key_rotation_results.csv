@@ -1,0 +1,17 @@
+timestamp,experiment,new_key_success,old_key_denied,residual_compromise_score,final_result,evidence_file
+2026-07-16 19:56:11,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260716_195611.txt
+2026-07-16 22:27:28,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260716_222728.txt
+2026-07-16 23:34:53,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260716_233453.txt
+2026-07-17 00:42:28,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260717_004228.txt
+2026-07-20 23:21:04,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260720_232104.txt
+2026-07-20 23:34:02,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260720_233402.txt
+2026-07-21 00:05:30,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260721_000530.txt
+2026-07-21 00:36:40,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260721_003640.txt
+2026-07-21 09:49:32,ssh_key_rotation,True,True,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260721_094932.txt
+2026-07-26 18:28:53,stolen_trusted_ssh_key,C:\Users\nayml\.ssh\gcp_thesis_vm_rotated_20260726_182246,C:\Users\nayml\.ssh\gcp_thesis_vm_compromised_20260726_182246,True,True,0/1,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260726_182853.txt
+2026-07-26 18:30:36,stolen_trusted_ssh_key,C:\Users\nayml\.ssh\gcp_thesis_vm_rotated_20260726_182246,C:\Users\nayml\.ssh\gcp_thesis_vm_compromised_20260726_182246,True,True,0/1,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260726_183036.txt
+2026-07-26 19:30:25,stolen_trusted_ssh_key,C:\Users\nayml\.ssh\gcp_thesis_vm_rotated_20260726_191115,C:\Users\nayml\.ssh\gcp_thesis_vm_compromised_20260726_191115,True,True,0/1,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260726_193025.txt
+2026-07-26 19:30:52,stolen_trusted_ssh_key,C:\Users\nayml\.ssh\gcp_thesis_vm_rotated_20260726_191115,C:\Users\nayml\.ssh\gcp_thesis_vm_compromised_20260726_191115,True,True,0/1,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260726_193052.txt
+2026-07-26 19:40:52,stolen_trusted_ssh_key,C:\Users\nayml\.ssh\gcp_thesis_vm_rotated_20260726_193848,C:\Users\nayml\.ssh\gcp_thesis_vm_compromised_20260726_193848,True,True,0/1,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260726_194052.txt
+2026-07-26 21:04:59,stolen_trusted_ssh_key,C:\Users\nayml\.ssh\gcp_thesis_vm_rotated_20260726_205947,C:\Users\nayml\.ssh\gcp_thesis_vm_compromised_20260726_205947,True,True,0/1,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260726_210459.txt
+2026-07-26 21:24:15,stolen_trusted_ssh_key,C:\Users\nayml\.ssh\gcp_thesis_vm_rotated_20260726_212108,C:\Users\nayml\.ssh\gcp_thesis_vm_compromised_20260726_212108,True,True,0/1,0,PASS,C:\iac-self-healing-thesis\evidence\ssh_key_rotation_validation_20260726_212415.txt

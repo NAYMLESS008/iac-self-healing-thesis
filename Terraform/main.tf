@@ -57,7 +57,8 @@ resource "google_compute_instance" "vm" {
 
   # Trusted SSH key added during VM creation
   metadata = {
-    ssh-keys = "${var.ssh_user}:${file(var.public_key_path)}"
+    block-project-ssh-keys = "true"
+    ssh-keys               = "${var.ssh_user}:${file(var.public_key_path)}"
 
     startup-script = <<-EOT
       #!/bin/bash
@@ -69,6 +70,96 @@ resource "google_compute_instance" "vm" {
       WAZUH_MANAGER="${var.wazuh_manager_ip}" dpkg -i ./wazuh-agent_4.14.5-1_amd64.deb
 
             sed -i 's|<directories>/etc,/usr/bin,/usr/sbin</directories>|<directories check_all="yes" realtime="yes" report_changes="yes">/etc,/usr/bin,/usr/sbin</directories>|' /var/ossec/etc/ossec.conf
+
+      for i in $(seq 1 30); do
+        if [ -f /home/${var.ssh_user}/.ssh/authorized_keys ]; then
+          break
+        fi
+        sleep 2
+      done
+
+      if [ -f /home/${var.ssh_user}/.ssh/authorized_keys ]; then
+        grep -q "/home/${var.ssh_user}/.ssh/authorized_keys" /var/ossec/etc/ossec.conf || sed -i '/<\/syscheck>/i\    <directories check_all="yes" realtime="yes" report_changes="yes">/home/${var.ssh_user}/.ssh/authorized_keys</directories>' /var/ossec/etc/ossec.conf
+      fi
+
+      echo "[STARTUP] Configuring Wazuh auth-log collection" >> /var/log/thesis-startup.log
+
+      if ! grep -q '<location>/var/log/auth.log</location>' /var/ossec/etc/ossec.conf; then
+        cat >> /var/ossec/etc/ossec.conf <<'WAZUH_AUTH_LOG'
+<ossec_config>
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+</ossec_config>
+WAZUH_AUTH_LOG
+      fi
+
+      echo "[STARTUP] Configuring listening-port command monitoring" >> /var/log/thesis-startup.log
+
+      touch /var/ossec/etc/local_internal_options.conf
+
+      grep -q '^logcollector.remote_commands=1$' /var/ossec/etc/local_internal_options.conf ||         echo 'logcollector.remote_commands=1' >> /var/ossec/etc/local_internal_options.conf
+
+      python3 - <<'PY'
+from pathlib import Path
+import re
+
+path = Path("/var/ossec/etc/ossec.conf")
+text = path.read_text()
+
+text, command_count = re.subn(
+    r"(?m)^[ \t]*<command>netstat .*?</command>$",
+    """    <command>ss -H -lnt | awk '{print $4}' | sort -u</command>""",
+    text,
+    count=1,
+)
+
+text, frequency_count = re.subn(
+    r"(<alias>netstat listening ports</alias>\s*<frequency>)\d+(</frequency>)",
+    r"\g<1>10\g<2>",
+    text,
+    count=1,
+)
+
+if command_count != 1:
+    raise SystemExit(
+        f"Expected one netstat command, replaced {command_count}."
+    )
+
+if frequency_count != 1:
+    raise SystemExit(
+        f"Expected one listener frequency, replaced {frequency_count}."
+    )
+
+path.write_text(text)
+PY
+
+      echo "[STARTUP] Configuring explicit thesis listener detection" >> /var/log/thesis-startup.log
+
+      if ! grep -q '<alias>thesis unexpected listener</alias>' /var/ossec/etc/ossec.conf; then
+        cat >> /var/ossec/etc/ossec.conf <<'WAZUH_THESIS_LISTENER'
+<ossec_config>
+  <localfile>
+    <log_format>full_command</log_format>
+    <command>if ss -H -lnt 'sport = :4444' | grep -q .; then echo 'THESIS_UNEXPECTED_LISTENER port=4444'; else echo 'THESIS_LISTENER_CLEAN'; fi</command>
+    <alias>thesis unexpected listener</alias>
+    <frequency>10</frequency>
+  </localfile>
+</ossec_config>
+WAZUH_THESIS_LISTENER
+      fi
+
+      echo "[STARTUP] Enabling verbose SSH authentication logging" >> /var/log/thesis-startup.log
+
+      if grep -qE '^[[:space:]]*LogLevel[[:space:]]+' /etc/ssh/sshd_config; then
+        sed -i 's/^[[:space:]]*LogLevel[[:space:]].*/LogLevel VERBOSE/' /etc/ssh/sshd_config
+      else
+        echo 'LogLevel VERBOSE' >> /etc/ssh/sshd_config
+      fi
+
+      sshd -t
+      systemctl restart ssh
 
       systemctl daemon-reload
       systemctl enable wazuh-agent
@@ -84,4 +175,5 @@ resource "google_compute_instance" "vm" {
     role    = "self-healing-test"
   }
 }
+
 

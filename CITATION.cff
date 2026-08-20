@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this research artefact, please cite the associated MSc thesis."
+title: "IaC Recovery Assurance for Runtime-Compromised Cloud VMs"
+type: software
+authors:
+  - family-names: "Menon"
+    given-names: "Adith"
+version: "1.0.0"
+date-released: "2026-08-20"
+repository-code: "https://github.com/NAYMLESS008/iac-self-healing-thesis"
+keywords:
+  - Infrastructure as Code
+  - incident recovery
+  - Terraform
+  - Wazuh
+  - cloud security
+  - runtime compromise
+  - recovery validation
