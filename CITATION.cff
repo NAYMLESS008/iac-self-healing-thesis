@@ -6,7 +6,7 @@ authors:
   - family-names: "Menon"
     given-names: "Adith"
 version: "1.0.0"
-date-released: "2026-08-20"
+date-released: "2026-08-24"
 repository-code: "https://github.com/NAYMLESS008/iac-self-healing-thesis"
 keywords:
   - Infrastructure as Code
