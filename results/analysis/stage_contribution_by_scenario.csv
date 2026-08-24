@@ -1,31 +1,31 @@
 scenario,stage,mean_stage_seconds,mean_total_seconds,percentage_of_total
-malicious_cron_persistence,Detection and active confirmation,20.87,560.57,3.72
-malicious_cron_persistence,Evidence capture,55.97,560.57,9.98
-malicious_cron_persistence,Quarantine,81.93,560.57,14.62
-malicious_cron_persistence,Stale Wazuh agent cleanup,65.4,560.57,11.67
-malicious_cron_persistence,IaC replacement,100.04,560.57,17.85
-malicious_cron_persistence,Post-recovery validation,236.36,560.57,42.16
+malicious_cron_persistence,Detection and active confirmation,19.81,933.33,2.12
+malicious_cron_persistence,Evidence capture,54.38,933.33,5.83
+malicious_cron_persistence,Stop-based containment,73.32,933.33,7.86
+malicious_cron_persistence,Stale Wazuh agent cleanup,66.13,933.33,7.09
+malicious_cron_persistence,IaC replacement,115.51,933.33,12.38
+malicious_cron_persistence,Post-recovery validation,604.18,933.33,64.73
 malicious_systemd_persistence,Detection and active confirmation,20.86,881.45,2.37
 malicious_systemd_persistence,Evidence capture,16.23,881.45,1.84
-malicious_systemd_persistence,Quarantine,78.84,881.45,8.94
+malicious_systemd_persistence,Stop-based containment,78.84,881.45,8.94
 malicious_systemd_persistence,Stale Wazuh agent cleanup,71.52,881.45,8.11
 malicious_systemd_persistence,IaC replacement,136.21,881.45,15.45
-malicious_systemd_persistence,Post-recovery validation,557.8,881.45,63.28
+malicious_systemd_persistence,Post-recovery validation,557.80,881.45,63.28
+unauthorized_ssh_public_key,Detection and active confirmation,17.42,1007.06,1.73
+unauthorized_ssh_public_key,Evidence capture,48.72,1007.06,4.84
+unauthorized_ssh_public_key,Stop-based containment,67.58,1007.06,6.71
+unauthorized_ssh_public_key,Stale Wazuh agent cleanup,57.65,1007.06,5.72
+unauthorized_ssh_public_key,IaC replacement,129.58,1007.06,12.87
+unauthorized_ssh_public_key,Post-recovery validation,686.10,1007.06,68.13
 unauthorized_local_user,Detection and active confirmation,21.66,1027.14,2.11
 unauthorized_local_user,Evidence capture,54.22,1027.14,5.28
-unauthorized_local_user,Quarantine,71.96,1027.14,7.01
+unauthorized_local_user,Stop-based containment,71.96,1027.14,7.01
 unauthorized_local_user,Stale Wazuh agent cleanup,60.34,1027.14,5.87
 unauthorized_local_user,IaC replacement,127.29,1027.14,12.39
 unauthorized_local_user,Post-recovery validation,691.66,1027.14,67.34
-unauthorized_ssh_public_key,Detection and active confirmation,17.42,1007.06,1.73
-unauthorized_ssh_public_key,Evidence capture,48.72,1007.06,4.84
-unauthorized_ssh_public_key,Quarantine,67.58,1007.06,6.71
-unauthorized_ssh_public_key,Stale Wazuh agent cleanup,57.65,1007.06,5.72
-unauthorized_ssh_public_key,IaC replacement,129.58,1007.06,12.87
-unauthorized_ssh_public_key,Post-recovery validation,686.1,1007.06,68.13
 unexpected_listener,Detection and active confirmation,16.93,1052.87,1.61
 unexpected_listener,Evidence capture,17.75,1052.87,1.69
-unexpected_listener,Quarantine,77.88,1052.87,7.4
+unexpected_listener,Stop-based containment,77.88,1052.87,7.40
 unexpected_listener,Stale Wazuh agent cleanup,67.87,1052.87,6.45
 unexpected_listener,IaC replacement,136.72,1052.87,12.99
 unexpected_listener,Post-recovery validation,735.72,1052.87,69.88
