@@ -99,7 +99,7 @@ The repository intentionally excludes or ignores:
 - controller runtime alert/rotation state;
 - virtual environments and editor/cache files.
 
-Cloud project identifiers and VM names may appear in the private research implementation because they were part of the evaluated environment; they are not authentication secrets. A future public release should parameterise or redact environment-specific identifiers before publication.
+Cloud project identifiers, VM names, agent identifiers and public SSH keys may appear in archived implementation output because they were part of the evaluated environment. They are not authentication secrets; private keys and credentials are excluded from the public artefact.
 
 ## Interpretation limits
 
