@@ -48,7 +48,7 @@ def wait_for_wazuh_restoration():
         )
 
         fim_result = run_target_command(
-            "sudo sudo grep -Fq "
+            "sudo grep -Fq "
             "'Real-time file integrity monitoring started.' "
             "/var/ossec/logs/ossec.log "
             "&& echo FIM_READY || echo FIM_NOT_READY"
@@ -202,4 +202,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
