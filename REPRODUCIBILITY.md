@@ -1,6 +1,6 @@
 # Reproducibility and artefact identification
 
-This repository contains the implementation and analysis artefacts supporting the MSc thesis **“Evaluating IaC-Based Recovery from Runtime Compromise in Stateless Cloud VMs.”**
+This repository contains the implementation and analysis artefacts supporting the MSc thesis **“Evaluating Infrastructure-as-Code-Based Recovery from Runtime Compromise in Stateless Cloud Virtual Machines.”**
 
 ## Frozen primary dataset
 
@@ -32,7 +32,20 @@ Rows outside the manifest are retained as development, superseded-protocol, cont
 | Controller host | Windows AMD64, Python 3.12.10 |
 | IaC toolchain | Terraform 1.15.5; Google provider constraint `~> 6.0`, resolved to 6.50.0 |
 | Administrative path | Google Cloud SDK 573.0.0; IAP-assisted SSH; `europe-west1-b` |
-| Monitoring | Wazuh 4.14.5; separate trusted manager; TCP 1514 events / TCP 1515 enrolment |
+| Monitoring | Wazuh 4.14.5; separate trusted manager VM in the same GCP project; TCP 1514 events / TCP 1515 enrolment |
+
+The evaluated Google Cloud location was **region `europe-west1`, zone `europe-west1-b`**. The checked-in Terraform variable defaults match that evaluated location. A machine-local `terraform.tfvars` may still override those defaults for replication.
+
+## Machine-local prerequisites
+
+Several runtime files are intentionally excluded from version control because they contain machine-specific paths or sensitive material. A fresh clone therefore requires local configuration before the complete recovery workflow can be executed:
+
+- `Terraform/terraform.tfvars` supplies deployment-specific values such as `project_id`, `public_key_path`, `allowed_ssh_cidr`, and `wazuh_manager_ip`;
+- SSH private keys and generated replacement keys remain outside the repository;
+- `controller/ssh_rotation_state.json` records the local paths of the current/previous trusted SSH keys after credential rotation and is intentionally ignored by Git;
+- systemd- and listener-related evidence/validation helpers that use the direct SSH/IAP path expect that local rotation state to exist.
+
+In the evaluated environment, `controller/rotate_compromised_ssh_key.py` created the rotation state as part of the SSH credential-rotation workflow. On another workstation, the local key path/state must be initialised for that machine before executing helpers that depend on it. These exclusions protect credentials and machine-local state; they do not alter the frozen result CSVs or analysis outputs.
 
 ## Measurement boundary
 
@@ -45,6 +58,8 @@ It **does not** include:
 - human investigation/authorisation before controller start.
 
 For that reason, `detection_check_duration_seconds` is **controller-side alert retrieval + active-state confirmation**, not Mean Time to Detect (MTTD).
+
+`replacement_duration_seconds` is the **controller-measured IaC replacement stage**, not a pure cloud-provider provisioning timer. The timed replacement module includes Terraform forced replacement and its immediate readiness checks for IAP reachability and local Wazuh-agent service activity before returning control to scenario-specific post-recovery validation.
 
 Monitoring-restoration duration is nested inside post-recovery validation and must not be added to the total a second time.
 
