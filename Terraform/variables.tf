@@ -3,16 +3,16 @@ variable "project_id" {
   type = string
 }
 
-# Google Cloud region
+# Google Cloud region used by the evaluated environment
 variable "region" {
   type    = string
-  default = "us-central1"
+  default = "europe-west1"
 }
 
-# Google Cloud zone
+# Google Cloud zone used by the evaluated environment
 variable "zone" {
   type    = string
-  default = "us-central1-a"
+  default = "europe-west1-b"
 }
 
 # VM size/type
@@ -36,6 +36,7 @@ variable "public_key_path" {
 variable "allowed_ssh_cidr" {
   type = string
 }
+
 # Internal IP address of the separate Wazuh Manager VM
 variable "wazuh_manager_ip" {
   type        = string
