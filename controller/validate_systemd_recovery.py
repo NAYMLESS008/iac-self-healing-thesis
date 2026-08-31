@@ -9,6 +9,7 @@ except ModuleNotFoundError:
     from iap_helpers import run_wazuh_command
 
 
+# --- Local state, target connection and systemd attack artefacts ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 
@@ -31,6 +32,7 @@ WAZUH_MAX_ATTEMPTS = 60
 WAZUH_WAIT_SECONDS = 15
 
 
+# --- Load the current trusted SSH key for the replacement VM ---
 def get_current_private_key():
     state = json.loads(
         STATE_FILE.read_text(encoding="utf-8")
@@ -46,6 +48,7 @@ def get_current_private_key():
     return private_key
 
 
+# --- Run one validation command through an IAP-backed SSH process ---
 def run_target_command(command):
     private_key = get_current_private_key()
 
@@ -96,6 +99,7 @@ def run_target_command(command):
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
 
+        # Clean up a hung Windows SSH/IAP process tree.
         subprocess.run(
             [
                 "taskkill",
@@ -107,6 +111,7 @@ def run_target_command(command):
             text=True,
         )
 
+        # Preserve explicit output if it arrived before proxy cleanup timed out.
         return_code = 0 if stdout.strip() else 124
 
     return {
@@ -116,7 +121,10 @@ def run_target_command(command):
     }
 
 
+# --- Check all six systemd-specific residual indicators ---
 def check_systemd_artifacts():
+    # A successful replacement should leave none of the injected service,
+    # script, enablement, running-process or heartbeat state behind.
     command = (
         f"if test -f {SERVICE_FILE}; "
         "then echo SERVICE_FILE_PRESENT; "
@@ -149,6 +157,7 @@ def check_systemd_artifacts():
     return run_target_command(command)
 
 
+# --- Wait for the three monitoring-readiness conditions ---
 def wait_for_wazuh_restoration():
     print(
         "[CHECK] Waiting for Wazuh monitoring restoration..."
@@ -160,6 +169,7 @@ def wait_for_wazuh_restoration():
         1,
         WAZUH_MAX_ATTEMPTS + 1,
     ):
+        # Local agent service state on the replacement VM.
         target_result = run_target_command(
             "sudo systemctl is-active "
             "wazuh-agent || true"
@@ -167,6 +177,7 @@ def wait_for_wazuh_restoration():
 
         target_status = target_result["stdout"].strip()
 
+        # Study-specific marker that real-time FIM startup has completed.
         fim_result = run_target_command(
             "sudo grep -Fq "
             "'Real-time file integrity monitoring started.' "
@@ -179,6 +190,7 @@ def wait_for_wazuh_restoration():
             and "FIM_NOT_READY" not in fim_result["stdout"]
         )
 
+        # Manager-side visibility of the replacement agent.
         manager_result = run_wazuh_command(
             "sudo /var/ossec/bin/agent_control -l"
         )
@@ -196,6 +208,7 @@ def wait_for_wazuh_restoration():
             f"fim_realtime_ready={fim_ready}"
         )
 
+        # Service activity alone is not enough; all three conditions must be true.
         if (
             target_status == "active"
             and manager_active
@@ -246,6 +259,8 @@ def wait_for_wazuh_restoration():
 
     return False, restoration_duration
 
+
+# --- Decide whether systemd recovery reaches the final acceptance state ---
 def main():
     print(
         "[START] Validating systemd persistence recovery"
@@ -269,6 +284,7 @@ def main():
         "HEARTBEAT_ABSENT",
     ]
 
+    # Any required absence marker not positively observed is counted as residual.
     residual_indicators = sum(
         marker not in result["stdout"]
         for marker in required_absent_markers
@@ -318,6 +334,7 @@ def main():
         f"{residual_score}"
     )
 
+    # Security-state checks must pass before monitoring restoration can complete recovery.
     if residual_indicators != 0:
         print(
             "[FAIL] Systemd persistence indicators "

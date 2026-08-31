@@ -6,6 +6,7 @@ from controller.iap_helpers import (
 )
 
 
+# --- Post-recovery conditions for the SSH public-key scenario ---
 AUTHORIZED_KEYS = "/home/thesisadmin/.ssh/authorized_keys"
 ATTACK_MARKER = "THESIS_UNAUTHORIZED_SSH_KEY"
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
@@ -14,7 +15,10 @@ WAZUH_MAX_ATTEMPTS = 60
 WAZUH_WAIT_SECONDS = 15
 
 
+# --- Check the two attack-specific security-state indicators ---
 def check_ssh_key_artifacts():
+    # Negative check: unauthorized marker must be absent.
+    # Positive check: the legitimate authorized_keys file must still exist.
     command = (
         f"if sudo grep -Fq '{ATTACK_MARKER}' {AUTHORIZED_KEYS}; "
         "then echo UNAUTHORIZED_KEY_PRESENT; "
@@ -27,17 +31,20 @@ def check_ssh_key_artifacts():
     return run_target_command(command)
 
 
+# --- Wait until monitoring is fully ready on the replacement ---
 def wait_for_wazuh_restoration():
     print("[CHECK] Waiting for Wazuh monitoring restoration...")
     restoration_start = time.time()
 
     for attempt in range(1, WAZUH_MAX_ATTEMPTS + 1):
+        # Check 1: Wazuh agent service is active on the replacement VM.
         local_result = run_target_command(
             "sudo systemctl is-active wazuh-agent || true"
         )
 
         local_status = local_result["stdout"].strip()
 
+        # Check 2: the manager sees the replacement target as Active.
         manager_result = run_wazuh_command(
             "sudo /var/ossec/bin/agent_control -l"
         )
@@ -47,6 +54,7 @@ def wait_for_wazuh_restoration():
             and "Active" in manager_result["stdout"]
         )
 
+        # Check 3: the replacement agent log contains the real-time FIM-ready marker.
         fim_result = run_target_command(
             "sudo grep -Fq "
             "'Real-time file integrity monitoring started.' "
@@ -67,6 +75,7 @@ def wait_for_wazuh_restoration():
             f"fim_realtime_ready={fim_ready}"
         )
 
+        # Full monitoring readiness requires all three states at the same time.
         if (
             local_status == "active"
             and manager_active
@@ -106,6 +115,7 @@ def wait_for_wazuh_restoration():
     return False
 
 
+# --- Decide whether the replacement satisfies recovery acceptance ---
 def main():
     print(
         "[START] Validating unauthorized SSH "
@@ -121,6 +131,7 @@ def main():
         print("[STDERR]")
         print(result["stderr"])
 
+    # A failed remote command is not interpreted as proof that the attack is absent.
     if result["return_code"] != 0:
         print(
             "[FAIL] Could not complete SSH public-key "
@@ -137,6 +148,7 @@ def main():
         "AUTHORIZED_KEYS_PRESENT" in stdout
     )
 
+    # Count any failed required condition as a residual indicator.
     residual_indicators = 0
 
     if not unauthorized_key_absent:
@@ -180,6 +192,7 @@ def main():
         f"{residual_score}"
     )
 
+    # Security-state validation must pass before monitoring readiness is checked.
     if residual_indicators != 0:
         print(
             "[FAIL] SSH public-key persistence indicators "

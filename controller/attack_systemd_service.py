@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 
+# --- Project paths and target connection settings ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 
@@ -12,9 +13,11 @@ ZONE = "europe-west1-b"
 TARGET_HOST = "thesis-self-healing-vm"
 TARGET_USER = "thesisadmin"
 
+# Explicit marker printed only after the service is created and checked.
 SUCCESS_MARKER = "SYSTEMD_PERSISTENCE_CREATED"
 
 
+# --- Load the current trusted SSH key for target administration ---
 def get_current_private_key():
     state = json.loads(
         STATE_FILE.read_text(encoding="utf-8")
@@ -30,9 +33,13 @@ def get_current_private_key():
     return key_path
 
 
+# --- Create the controlled systemd persistence mechanism ---
 def main():
     private_key = get_current_private_key()
 
+    # The remote script creates two main artefacts:
+    # 1) a shell script that writes a heartbeat every 30 seconds; and
+    # 2) a systemd unit configured to restart and start at multi-user boot.
     attack_script = r'''set -e
 
 sudo tee /usr/local/bin/thesis-persistence.sh >/dev/null <<'SCRIPT'
@@ -70,10 +77,12 @@ sudo systemctl is-active thesis-persistence.service
 echo SYSTEMD_PERSISTENCE_CREATED
 '''
 
+    # Base64 keeps the multi-line shell script intact while it crosses SSH.
     encoded = base64.b64encode(
         attack_script.encode("utf-8")
     ).decode("ascii")
 
+    # Use Google Cloud IAP as the transport for the SSH connection.
     proxy_command = (
         "gcloud.cmd compute start-iap-tunnel "
         f"{TARGET_HOST} %p "
@@ -95,6 +104,7 @@ echo SYSTEMD_PERSISTENCE_CREATED
         f"echo {encoded} | base64 -d | bash",
     ]
 
+    # Popen allows the Windows-side SSH/IAP process tree to be terminated if it hangs.
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -115,6 +125,7 @@ echo SYSTEMD_PERSISTENCE_CREATED
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
 
+        # Clean up the SSH/IAP process tree after a timeout.
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
             capture_output=True,
@@ -127,6 +138,7 @@ echo SYSTEMD_PERSISTENCE_CREATED
     if stderr:
         print(stderr.strip())
 
+    # Require the explicit marker proving the remote setup reached its final check.
     if SUCCESS_MARKER not in stdout:
         print("[FAIL] Systemd persistence attack failed.")
         return 1

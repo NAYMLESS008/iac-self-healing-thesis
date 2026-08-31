@@ -24,6 +24,7 @@ except ModuleNotFoundError:
     )
 
 
+# --- Scenario-specific systemd artefacts ---
 SERVICE_PATH = (
     "/etc/systemd/system/"
     "thesis-persistence.service"
@@ -34,6 +35,7 @@ TARGET_AGENT_NAME = "thesis-self-healing-vm"
 SCENARIO = "malicious_systemd_persistence"
 
 
+# --- Live check: confirm the systemd persistence is still active now ---
 def target_persistence_exists():
     remote_command = (
         f"if test -f {SERVICE_PATH}; "
@@ -48,6 +50,7 @@ def target_persistence_exists():
         "else echo SERVICE_INACTIVE; fi"
     )
 
+    # All three markers are required to call this controlled persistence active.
     required_markers = {
         "SERVICE_FILE_PRESENT",
         "SCRIPT_FILE_PRESENT",
@@ -63,11 +66,14 @@ def target_persistence_exists():
             f"{output or 'EMPTY'}"
         )
 
+        # Convert the returned lines to a set and require every expected marker.
         output_markers = set(output.splitlines())
 
         if required_markers.issubset(output_markers):
             return True
 
+        # Non-empty explicit output that does not contain all markers means the
+        # active-state condition is not satisfied; empty output is retried.
         if output:
             return False
 
@@ -80,7 +86,10 @@ def target_persistence_exists():
 
     return False
 
+
+# --- Select the newest exact unprocessed Wazuh FIM alert ---
 def unprocessed_wazuh_alert_exists():
+    # Search both the current alert file and compressed historical alert files.
     remote_command = (
         "sudo grep -F "
         f"'{SERVICE_PATH}' "
@@ -99,6 +108,7 @@ def unprocessed_wazuh_alert_exists():
         print("[NO WAZUH SYSTEMD ALERT FOUND]")
         return False
 
+    # Keying by alert ID de-duplicates the same alert if it is returned twice.
     matching_alerts = {}
 
     for line in result["stdout"].splitlines():
@@ -123,6 +133,7 @@ def unprocessed_wazuh_alert_exists():
             {},
         ).get("groups", [])
 
+        # Match target, exact unit path, add/modify event and FIM/syscheck group.
         if (
             alert_id
             and agent_name == TARGET_AGENT_NAME
@@ -139,6 +150,7 @@ def unprocessed_wazuh_alert_exists():
         )
         return False
 
+    # Sort newest first, then choose the first alert not already processed.
     ordered_alerts = sorted(
         matching_alerts.values(),
         key=lambda alert: alert.get("timestamp", ""),
@@ -166,6 +178,7 @@ def unprocessed_wazuh_alert_exists():
 
     alert_id = str(selected_alert["id"])
 
+    # Save the exact alert so it can be marked processed after full recovery only.
     save_selected_alert(
         SCENARIO,
         alert_id,
@@ -180,6 +193,8 @@ def unprocessed_wazuh_alert_exists():
 
     return True
 
+
+# --- Recovery gate: historical Wazuh detection + current active persistence ---
 def recoverable_alert_exists():
     if not unprocessed_wazuh_alert_exists():
         return False
@@ -204,6 +219,7 @@ def recoverable_alert_exists():
     return False
 
 
+# --- Entry point used by the systemd recovery orchestrator ---
 def main():
     check_only = "--check-only" in sys.argv
 

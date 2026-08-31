@@ -8,11 +8,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# --- Scenario result file and alert-state name ---
 RESULTS_DIR = Path("results")
 RESULTS_FILE = RESULTS_DIR / "cron_recovery_formal_results.csv"
 SCENARIO = "malicious_cron_persistence"
 
 
+# --- Read a named [METRIC] value printed by one of the child scripts ---
 def extract_metric(output, metric_name, default=""):
     pattern = re.compile(
         rf"^\[METRIC\]\s+{re.escape(metric_name)}\s*=\s*(.+?)\s*$",
@@ -27,6 +29,7 @@ def extract_metric(output, metric_name, default=""):
     return match.group(1).strip()
 
 
+# --- Run one recovery stage, capture its output, and measure stage duration ---
 def run_step(name, command):
     print(f"\n[STEP] {name}")
     start_time = time.time()
@@ -60,6 +63,7 @@ def run_step(name, command):
     }
 
 
+# --- Append one formal-run row to the cron results CSV ---
 def log_result(row):
     RESULTS_DIR.mkdir(exist_ok=True)
     file_exists = RESULTS_FILE.exists()
@@ -103,6 +107,7 @@ def log_result(row):
         writer.writerow(row)
 
 
+# --- Stop at a failed gate, record the partial run, and return failure ---
 def stop_and_log(reason, row, workflow_start):
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
@@ -126,6 +131,7 @@ def main():
     print(" Starting malicious cron recovery orchestrator ")
     print("================================================")
 
+    # --- Initialize the end-to-end timer and result row ---
     workflow_start = time.time()
 
     row = {
@@ -160,6 +166,7 @@ def main():
         "final_result": "",
     }
 
+    # --- Stage 1: Select a Wazuh alert and confirm the cron compromise is still active ---
     detection = run_step(
         "Wazuh detection and active cron confirmation",
         [
@@ -181,6 +188,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 2: Capture all required pre-replacement cron evidence ---
     evidence = run_step(
         "Evidence capture before replacement",
         [
@@ -195,6 +203,7 @@ def main():
     )
     row["evidence_capture_duration_seconds"] = evidence["duration"]
 
+    # Pull the evidence checklist metrics out of the child script's stdout.
     row["evidence_items_required"] = extract_metric(
         evidence["stdout"],
         "evidence_items_required",
@@ -211,6 +220,7 @@ def main():
         "UNKNOWN",
     )
 
+    # Evidence capture is a gate: no stop/rebuild occurs if it fails.
     if not evidence["success"]:
         return stop_and_log(
             "FAILED_EVIDENCE_CAPTURE",
@@ -218,6 +228,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 3: Stop the compromised VM and wait for TERMINATED state ---
     quarantine = run_step(
         "Quarantine compromised target VM",
         [
@@ -239,6 +250,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 4: Remove the old Wazuh agent registration before replacement ---
     cleanup = run_step(
         "Remove stale Wazuh agent registration",
         [
@@ -260,6 +272,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 5: Force Terraform to replace the target VM ---
     replacement = run_step(
         "Terraform replacement recovery",
         [
@@ -281,6 +294,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 6: Check cron residual indicators and wait for Wazuh/FIM readiness ---
     validation = run_step(
         "Post-recovery cron and monitoring validation",
         [
@@ -295,6 +309,7 @@ def main():
     )
     row["validation_duration_seconds"] = validation["duration"]
 
+    # Extract the security-validation and monitoring metrics produced by the validator.
     row["validation_indicators_total"] = extract_metric(
         validation["stdout"],
         "validation_indicators_total",
@@ -337,6 +352,7 @@ def main():
         "UNKNOWN",
     )
 
+    # --- Final end-to-end outcome ---
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
         2
@@ -346,6 +362,7 @@ def main():
         "PASS" if validation["success"] else "FAIL"
     )
 
+    # Only mark the Wazuh alert processed after every recovery stage succeeds.
     if validation["success"]:
         if not mark_selected_alert_processed(SCENARIO):
             return stop_and_log(

@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 
+# --- Rotation state and Wazuh rule that tracks the trusted SSH fingerprint ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = (
     PROJECT_ROOT
@@ -15,6 +16,7 @@ WAZUH_SSH_ALIAS = "thesis-wazuh-iap-quiet"
 RULE_ID = "100002"
 
 
+# --- Calculate the SHA256 fingerprint of the currently trusted public key ---
 def get_current_fingerprint():
     if not STATE_FILE.exists():
         raise FileNotFoundError(
@@ -55,6 +57,7 @@ def get_current_fingerprint():
             result.stderr.strip()
         )
 
+    # ssh-keygen output contains a token such as SHA256:abc123....
     for part in result.stdout.split():
         if part.startswith("SHA256:"):
             return part
@@ -64,7 +67,9 @@ def get_current_fingerprint():
     )
 
 
+# --- Update the custom Wazuh rule so it matches the latest trusted key ---
 def update_manager_rule(fingerprint):
+    # This Python snippet is sent to the Wazuh Manager and edits local_rules.xml.
     remote_python = f'''
 import re
 from pathlib import Path
@@ -115,10 +120,12 @@ path.write_text(
 print("RULE_100002_UPDATED")
 '''
 
+    # Base64 avoids shell quoting problems when transporting the Python snippet.
     encoded_script = base64.b64encode(
         remote_python.encode("utf-8")
     ).decode("ascii")
 
+    # After editing, test the Wazuh rules, restart the manager, and show the rule.
     remote_command = (
         f"echo {encoded_script} | "
         "base64 -d | "
@@ -159,6 +166,7 @@ print("RULE_100002_UPDATED")
 
 
 def main():
+    # --- Read current fingerprint and synchronize Wazuh with it ---
     fingerprint = get_current_fingerprint()
 
     print(

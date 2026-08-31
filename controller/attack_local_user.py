@@ -1,9 +1,12 @@
 ﻿from controller.iap_helpers import run_target_command
 
 
+# --- Controlled attack marker ---
+# This is the deliberately created privileged account used by the experiment.
 BACKDOOR_USER = "thesisbackdoor"
 
 
+# --- Create and confirm the unauthorized privileged local account ---
 def main():
     print("[START] Creating unauthorized local-user persistence")
 
@@ -43,6 +46,8 @@ def main():
 
     print(confirm["stdout"])
 
+    # The scenario counts as active only when the account exists AND the
+    # returned group list confirms privileged sudo membership.
     if (
         confirm["return_code"] != 0
         or "sudo" not in confirm["stdout"]

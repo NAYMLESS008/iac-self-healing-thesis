@@ -1,4 +1,4 @@
-﻿from controller.alert_state import mark_selected_alert_processed
+from controller.alert_state import mark_selected_alert_processed
 import csv
 import re
 import subprocess
@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# --- Scenario result file ---
 RESULTS_DIR = Path("results")
 RESULTS_FILE = (
     RESULTS_DIR
@@ -15,6 +16,7 @@ RESULTS_FILE = (
 )
 
 
+# --- Parse one [METRIC] value printed by a child stage ---
 def extract_metric(
     output,
     metric_name,
@@ -38,6 +40,7 @@ def extract_metric(
     return match.group(1).strip()
 
 
+# --- Execute one workflow stage and measure its duration ---
 def run_step(name, command):
     print(f"\n[STEP] {name}")
     start_time = time.time()
@@ -80,6 +83,7 @@ def run_step(name, command):
     }
 
 
+# --- Append the completed/partial formal run to the CSV ---
 def log_result(row):
     RESULTS_DIR.mkdir(exist_ok=True)
     file_exists = RESULTS_FILE.exists()
@@ -130,6 +134,7 @@ def log_result(row):
         writer.writerow(row)
 
 
+# --- Fail closed at a workflow gate and save what happened so far ---
 def stop_and_log(
     reason,
     row,
@@ -165,6 +170,7 @@ def main():
         "================================================"
     )
 
+    # --- Initialize the end-to-end timer and formal result row ---
     workflow_start = time.time()
 
     row = {
@@ -201,6 +207,7 @@ def main():
         "final_result": "",
     }
 
+    # --- Stage 1: Match the Wazuh listener alert and confirm port/process are active ---
     detection = run_step(
         (
             "Wazuh detection and active listener "
@@ -231,6 +238,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 2: Preserve the predefined listener evidence before VM destruction ---
     evidence = run_step(
         "Evidence capture before replacement",
         [
@@ -271,6 +279,7 @@ def main():
         "evidence_completeness_percentage",
     )
 
+    # Evidence is a hard gate; replacement does not continue if capture is incomplete.
     if not evidence["success"]:
         return stop_and_log(
             "FAILED_EVIDENCE_CAPTURE",
@@ -278,6 +287,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 3: Stop the compromised VM ---
     quarantine = run_step(
         "Quarantine compromised target VM",
         [
@@ -304,6 +314,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 4: Remove the old Wazuh registration so the replacement can register cleanly ---
     cleanup = run_step(
         "Remove stale Wazuh agent registration",
         [
@@ -330,6 +341,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 5: Force Terraform replacement from the trusted IaC definition ---
     replacement = run_step(
         "Terraform replacement recovery",
         [
@@ -356,6 +368,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 6: Verify listener artefacts are absent and monitoring is ready ---
     validation = run_step(
         (
             "Post-recovery listener and "
@@ -378,6 +391,7 @@ def main():
         "validation_duration_seconds"
     ] = validation["duration"]
 
+    # Collect the validator's predefined residual/monitoring metrics.
     row["validation_indicators_total"] = (
         extract_metric(
             validation["stdout"],
@@ -440,6 +454,7 @@ def main():
         )
     )
 
+    # --- Finalize the end-to-end result ---
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
         2,
@@ -451,6 +466,7 @@ def main():
         else "FAIL"
     )
 
+    # Delay processed-alert marking until the entire recovery has succeeded.
     if validation["success"]:
         mark_selected_alert_processed(
             "unexpected_listener"

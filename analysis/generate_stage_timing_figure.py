@@ -1,9 +1,10 @@
-﻿import csv
+import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 
 
+# --- Analysis input and figure output paths ---
 INPUT = Path(
     "results/analysis/stage_contribution_by_scenario.csv"
 )
@@ -13,6 +14,7 @@ OUTPUT = Path(
 )
 
 
+# Fixed scenario order and short labels used on the chart.
 SCENARIO_ORDER = [
     "malicious_cron_persistence",
     "malicious_systemd_persistence",
@@ -35,6 +37,7 @@ SCENARIO_LABELS = {
 }
 
 
+# Workflow stages are plotted in the same order that they execute.
 STAGE_ORDER = [
     "Detection and active confirmation",
     "Evidence capture",
@@ -61,6 +64,7 @@ STAGE_LABELS = {
 }
 
 
+# --- Load the pre-calculated mean stage contribution data ---
 with INPUT.open(
     newline="",
     encoding="utf-8-sig",
@@ -68,6 +72,7 @@ with INPUT.open(
     rows = list(csv.DictReader(f))
 
 
+# Pre-create every scenario/stage slot so missing values default to zero.
 data = {
     scenario: {
         stage: 0.0
@@ -77,6 +82,7 @@ data = {
 }
 
 
+# --- Fill the scenario/stage matrix from the CSV ---
 for row in rows:
     scenario = row["scenario"]
     stage = row["stage"]
@@ -95,9 +101,11 @@ labels = [
     for scenario in SCENARIO_ORDER
 ]
 
+# 'bottom' tracks the current stack height for each scenario bar.
 bottom = [0.0] * len(SCENARIO_ORDER)
 
 
+# --- Build the stacked bar chart of mean stage durations ---
 plt.figure(figsize=(11, 7))
 
 
@@ -115,6 +123,7 @@ for stage in STAGE_ORDER:
         label=STAGE_LABELS[stage],
     )
 
+    # Move the next stage upward by the height already plotted.
     bottom = [
         current + value
         for current, value
@@ -143,6 +152,7 @@ plt.grid(
 plt.tight_layout()
 
 
+# --- Save the figure for use in the report ---
 OUTPUT.parent.mkdir(
     parents=True,
     exist_ok=True,
@@ -160,6 +170,7 @@ plt.close()
 print("[OK] Figure created:")
 print(OUTPUT)
 
+# --- Print the exact values used so the plotted data can be checked manually ---
 print("\n=== VALUES USED ===")
 
 for scenario in SCENARIO_ORDER:

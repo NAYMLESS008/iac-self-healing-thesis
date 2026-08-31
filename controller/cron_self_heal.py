@@ -5,12 +5,16 @@ from pathlib import Path
 from iap_helpers import run_target_command
 
 
+# --- Older direct-removal cron helper paths ---
+# This script removes the cron artefacts in place; the final formal recovery
+# workflow uses the separate replacement orchestrator instead.
 MALICIOUS_CRON = "/etc/cron.d/realtime_evil_persistence"
 PAYLOAD_LOG = "/tmp/realtime-cron.log"
 EVIDENCE_DIR = Path("evidence")
 RESULTS_FILE = Path("results/experiments.csv")
 
 
+# --- Compatibility wrapper around the shared IAP target-command helper ---
 def run_ssh(command):
     """
     Runs a command on the Terraform-managed target VM through IAP.
@@ -26,6 +30,7 @@ def run_ssh(command):
     )
 
 
+# --- Capture a small cron-file evidence snapshot before removal ---
 def capture_evidence():
     EVIDENCE_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -49,6 +54,7 @@ def capture_evidence():
     return evidence_file, code == 0
 
 
+# --- Check whether the malicious cron definition currently exists ---
 def persistence_exists():
     """
     Uses echo instead of raw test exit code.
@@ -62,6 +68,7 @@ def persistence_exists():
     return "EXISTS" in stdout
 
 
+# --- Directly remove the cron definition and its payload log ---
 def remove_persistence():
     code, stdout, stderr = run_ssh(
         f"sudo rm -f {MALICIOUS_CRON} {PAYLOAD_LOG}"
@@ -70,6 +77,7 @@ def remove_persistence():
     return code == 0, stdout, stderr
 
 
+# --- Confirm both direct-removal artefacts are absent ---
 def validate_clean():
     """
     Uses echo instead of raw test exit code so clean/missing state is handled clearly.
@@ -82,6 +90,7 @@ def validate_clean():
     return "CLEAN" in stdout
 
 
+# --- Append this helper's outcome to its CSV log ---
 def log_result(status, evidence_path=""):
     RESULTS_FILE.parent.mkdir(exist_ok=True)
 
@@ -110,6 +119,7 @@ def log_result(status, evidence_path=""):
         ])
 
 
+# --- Run the older in-place cron recovery sequence ---
 def main():
     print("[1] Checking for malicious cron persistence through IAP...")
 

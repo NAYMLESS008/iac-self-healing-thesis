@@ -4,14 +4,18 @@ from pathlib import Path
 from controller.iap_helpers import run_target_command, run_wazuh_command
 
 
+# --- Scenario artefacts and local evidence destination ---
 ATTACK_PATH = "/etc/cron.d/realtime_evil_persistence"
 PAYLOAD_LOG = "/tmp/realtime-cron.log"
 EVIDENCE_DIR = Path("evidence")
 
 
+# --- Run one target-side evidence command and format its raw result ---
 def run_target_evidence_section(title, command):
     result = run_target_command(command)
 
+    # Keep return code, stdout and stderr together so failed/partial collection
+    # remains visible in the saved evidence file.
     section = (
         f"\n===== {title} =====\n"
         f"return_code: {result['return_code']}\n"
@@ -22,6 +26,7 @@ def run_target_evidence_section(title, command):
     return result, section
 
 
+# --- Capture all required cron evidence before destructive recovery ---
 def main():
     print("[START] Capturing malicious cron persistence evidence")
 
@@ -35,12 +40,14 @@ def main():
 
     sections = []
 
+    # 1. Identify exactly which target and time the evidence came from.
     identity_result, identity_section = run_target_evidence_section(
         "TARGET IDENTITY",
         "date --iso-8601=seconds; hostname"
     )
     sections.append(identity_section)
 
+    # 2. Preserve the malicious cron definition itself.
     cron_result, cron_section = run_target_evidence_section(
         "MALICIOUS CRON FILE",
         (
@@ -51,6 +58,7 @@ def main():
     )
     sections.append(cron_section)
 
+    # 3. Preserve ownership, permissions, timestamps and other file metadata.
     stat_result, stat_section = run_target_evidence_section(
         "CRON FILE METADATA",
         (
@@ -61,6 +69,7 @@ def main():
     )
     sections.append(stat_section)
 
+    # 4. Capture proof that the scheduled payload actually executed.
     payload_result, payload_section = run_target_evidence_section(
         "PAYLOAD EXECUTION LOG",
         (
@@ -71,12 +80,14 @@ def main():
     )
     sections.append(payload_section)
 
+    # 5. Record that the cron service responsible for scheduling is active.
     service_result, service_section = run_target_evidence_section(
         "CRON SERVICE STATUS",
         "sudo systemctl is-active cron"
     )
     sections.append(service_section)
 
+    # 6. Preserve the matching Wazuh FIM alert from the trusted manager.
     wazuh_result = run_wazuh_command(
         "sudo grep -F "
         f"'{ATTACK_PATH}' "
@@ -93,6 +104,7 @@ def main():
     )
     sections.append(wazuh_section)
 
+    # Save all raw evidence sections before deciding whether the evidence gate passes.
     evidence_text = (
         "MALICIOUS CRON PERSISTENCE EVIDENCE\n"
         f"capture_timestamp_utc: "
@@ -104,6 +116,7 @@ def main():
 
     evidence_file.write_text(evidence_text, encoding="utf-8")
 
+    # --- Convert raw collection results into the six required checklist items ---
     cron_captured = (
         cron_result["return_code"] == 0
         and "CRON_FILE_MISSING" not in cron_result["stdout"]
@@ -122,6 +135,8 @@ def main():
 
     wazuh_output = wazuh_result["stdout"]
 
+    # Accept the relevant Wazuh file-added/changed rule IDs only when the exact
+    # syscheck location and malicious path are also present.
     wazuh_captured = (
         wazuh_result["return_code"] == 0
         and (
@@ -144,6 +159,8 @@ def main():
         "wazuh_alert": wazuh_captured,
     }
 
+    # Completeness is this scenario's predefined checklist score, not a claim
+    # that every possible forensic artefact has been captured.
     evidence_items_required = len(evidence_checks)
     evidence_items_captured = sum(evidence_checks.values())
 
@@ -169,6 +186,7 @@ def main():
         f"{evidence_completeness_percentage}"
     )
 
+    # --- Evidence gate: every required item must be present before replacement ---
     if not cron_captured:
         print("[FAIL] Malicious cron file evidence was not captured.")
         print(f"[INFO] Partial evidence saved to: {evidence_file}")

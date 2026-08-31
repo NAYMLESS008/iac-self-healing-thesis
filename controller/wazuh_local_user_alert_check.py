@@ -11,12 +11,14 @@ from controller.iap_helpers import (
 )
 
 
+# --- Scenario-specific detection values ---
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 BACKDOOR_USER = "thesisbackdoor"
 CREATE_USER_RULE_ID = "5902"
 SCENARIO = "unauthorized_local_user"
 
 
+# --- Live check: does the unauthorized account currently exist? ---
 def target_user_exists():
     result = run_target_command(
         f"if id {BACKDOOR_USER} >/dev/null 2>&1; "
@@ -26,6 +28,7 @@ def target_user_exists():
     return "EXISTS" in result["stdout"]
 
 
+# --- Live check: does that account currently have sudo membership? ---
 def target_user_is_privileged():
     result = run_target_command(
         f"id -nG {BACKDOOR_USER} 2>/dev/null || true"
@@ -34,6 +37,7 @@ def target_user_is_privileged():
     return "sudo" in result["stdout"].split()
 
 
+# --- Select an exact unprocessed Wazuh account-creation alert ---
 def unprocessed_user_alert_exists():
     remote_command = (
         "sudo grep -F "
@@ -61,6 +65,7 @@ def unprocessed_user_alert_exists():
         rule_id = str(alert.get("rule", {}).get("id", ""))
         created_user = alert.get("data", {}).get("dstuser")
 
+        # All fields must match the controlled scenario; rule 5902 alone is not enough.
         if (
             alert_id
             and agent_name == TARGET_AGENT_NAME
@@ -73,6 +78,7 @@ def unprocessed_user_alert_exists():
         print("[NO MATCHING USER-CREATION ALERT FOUND]")
         return False
 
+    # The final matching item is the newest alert in the returned log slice.
     latest_alert = matching_alerts[-1]
     alert_id = str(latest_alert["id"])
 
@@ -83,6 +89,7 @@ def unprocessed_user_alert_exists():
         )
         return False
 
+    # Save the exact alert so it can be marked processed only after full recovery.
     save_selected_alert(SCENARIO, alert_id)
 
     print("[UNPROCESSED USER-CREATION ALERT FOUND]")
@@ -91,6 +98,7 @@ def unprocessed_user_alert_exists():
     return True
 
 
+# --- Recovery gate: historical alert + current privileged account must both exist ---
 def recoverable_user_persistence_exists():
     if not unprocessed_user_alert_exists():
         return False
@@ -117,6 +125,7 @@ def recoverable_user_persistence_exists():
     return True
 
 
+# --- Entry point used by the recovery orchestrator ---
 def main():
     print(
         "[1] Checking Wazuh for an unprocessed unauthorized "

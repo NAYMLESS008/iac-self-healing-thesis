@@ -5,11 +5,14 @@ from pathlib import Path
 from controller.iap_helpers import run_target_command, run_wazuh_command
 
 
+# --- Evidence destination and target SSH file ---
 EVIDENCE_DIR = Path("evidence")
 TARGET_AUTHORIZED_KEYS = "/home/thesisadmin/.ssh/authorized_keys"
 
 
+# --- Test whether the known old/compromised key can still authenticate ---
 def run_old_key_test():
+    # This SSH alias is configured to use the key being treated as compromised.
     result = subprocess.run(
         [
             "ssh",
@@ -25,6 +28,7 @@ def run_old_key_test():
     return result
 
 
+# --- Capture credential-compromise evidence before replacement/rotation ---
 def main():
     EVIDENCE_DIR.mkdir(exist_ok=True)
 
@@ -33,6 +37,7 @@ def main():
 
     print("[INFO] Capturing stolen trusted SSH-key evidence...")
 
+    # Preserve target identity plus the current authorized_keys metadata/content.
     target_command = f"""
 echo '=== TARGET SYSTEM INFO ==='
 hostname
@@ -49,12 +54,15 @@ cat {TARGET_AUTHORIZED_KEYS}
 
     target_result = run_target_command(target_command)
 
+    # Preserve recent Wazuh records related to authorized_keys.
     wazuh_result = run_wazuh_command(
         "sudo grep -i authorized_keys /var/ossec/logs/alerts/alerts.json | tail -n 5"
     )
 
+    # Record whether the compromised credential still works before recovery.
     old_key_result = run_old_key_test()
 
+    # Keep raw outputs together in one timestamped evidence file.
     with evidence_file.open("w", encoding="utf-8") as f:
         f.write("STOLEN TRUSTED SSH KEY EVIDENCE - PRE REPLACEMENT\n")
         f.write("=" * 60 + "\n")

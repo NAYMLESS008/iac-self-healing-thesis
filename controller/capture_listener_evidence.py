@@ -6,6 +6,7 @@ from pathlib import Path
 from controller.iap_helpers import run_wazuh_command
 
 
+# --- Local paths and target connection settings ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 EVIDENCE_DIR = PROJECT_ROOT / "evidence"
@@ -15,11 +16,13 @@ ZONE = "europe-west1-b"
 TARGET_HOST = "thesis-self-healing-vm"
 TARGET_USER = "thesisadmin"
 
+# Controlled runtime-listener values used by detection and evidence checks.
 PORT = 4444
 RULE_ID = "100120"
 ALERT_LOCATION = "thesis unexpected listener"
 
 
+# --- Load the current trusted key used to access the target ---
 def get_current_private_key():
     state = json.loads(
         STATE_FILE.read_text(encoding="utf-8-sig")
@@ -35,7 +38,10 @@ def get_current_private_key():
     return private_key
 
 
+# --- Collect target-side evidence for the active listener and its artefacts ---
 def run_remote_evidence_command(private_key):
+    # The script captures identity, socket state, PID, process command/executable
+    # and log artefact, then emits explicit PASS/FAIL markers for each item.
     remote_command = rf'''
 PID_FILE=/var/tmp/thesis-unexpected-listener.pid
 LOG_FILE=/var/tmp/thesis-unexpected-listener.log
@@ -131,6 +137,7 @@ else
 fi
 '''
 
+    # Use the current trusted SSH key through an IAP tunnel.
     proxy_command = (
         "gcloud.cmd compute start-iap-tunnel "
         f"{TARGET_HOST} %p "
@@ -175,6 +182,7 @@ fi
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
 
+        # Clean up a hung Windows SSH/IAP process tree.
         subprocess.run(
             [
                 "taskkill",
@@ -189,7 +197,9 @@ fi
     return stdout, stderr
 
 
+# --- Find the exact Wazuh command-monitoring alert for port 4444 ---
 def get_matching_wazuh_alert():
+    # Search both current and compressed Wazuh alert logs for the explicit marker.
     command = (
         "sudo grep -F "
         f"'THESIS_UNEXPECTED_LISTENER port={PORT}' "
@@ -204,6 +214,7 @@ def get_matching_wazuh_alert():
 
     result = run_wazuh_command(command)
 
+    # De-duplicate by alert ID before choosing the newest matching event.
     matching_alerts = {}
 
     for line in result["stdout"].splitlines():
@@ -239,6 +250,7 @@ def get_matching_wazuh_alert():
     return result, json.dumps(newest_alert)
 
 
+# --- Save evidence and enforce the seven-item listener evidence gate ---
 def main():
     print(
         "[INFO] Capturing unexpected-listener evidence..."
@@ -254,6 +266,7 @@ def main():
         get_matching_wazuh_alert()
     )
 
+    # Six target-side items plus one matching Wazuh alert = seven required items.
     target_evidence_markers = [
         "EVIDENCE_TARGET_IDENTITY=PASS",
         "EVIDENCE_LISTENING_PORT=PASS",
@@ -275,6 +288,7 @@ def main():
     if matching_alert:
         evidence_items_captured += 1
 
+    # Checklist completeness is scenario-specific, not a universal forensic score.
     evidence_completeness_percentage = round(
         (
             evidence_items_captured
@@ -314,6 +328,7 @@ def main():
         )
     )
 
+    # Preserve raw evidence regardless of whether the later gate passes.
     content = (
         "UNEXPECTED LISTENER EVIDENCE\n"
         "CAPTURED BEFORE TERRAFORM REPLACEMENT\n"
@@ -347,6 +362,7 @@ def main():
         encoding="utf-8",
     )
 
+    # Missing evidence stops the workflow before destructive recovery.
     if (
         evidence_items_captured
         != evidence_items_required

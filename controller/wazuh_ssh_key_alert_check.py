@@ -1,4 +1,4 @@
-﻿import json
+import json
 import subprocess
 import time
 from pathlib import Path
@@ -10,6 +10,7 @@ from controller.alert_state import (
 from controller.iap_helpers import run_wazuh_command
 
 
+# --- Wazuh alert source and scenario identity ---
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 ALERTS_FILE = "/var/ossec/logs/alerts/alerts.json"
 
@@ -21,6 +22,7 @@ ROTATION_STATE_FILE = (
 )
 
 
+# --- Calculate the fingerprint of the key that is currently trusted/compromised ---
 def get_compromised_fingerprint():
     """
     Calculate the fingerprint of the SSH key currently trusted
@@ -93,6 +95,7 @@ def get_compromised_fingerprint():
     return fingerprint
 
 
+# Resolve once so the alert filter uses the exact fingerprint for this run.
 COMPROMISED_FINGERPRINT = get_compromised_fingerprint()
 
 PROJECT_ID = "project-207ee30d-2273-45b0-8a0"
@@ -103,6 +106,7 @@ EXPECTED_USER = "thesisadmin"
 EXPECTED_HOSTNAME = "thesis-self-healing-vm"
 
 
+# --- Load the private key whose use is being treated as compromised ---
 def get_compromised_private_key():
     if not ROTATION_STATE_FILE.exists():
         raise FileNotFoundError(
@@ -132,6 +136,7 @@ def get_compromised_private_key():
     return private_key
 
 
+# --- Live-state confirmation: prove the compromised key still authenticates ---
 def compromised_key_is_active():
     try:
         compromised_private_key = (
@@ -186,6 +191,7 @@ def compromised_key_is_active():
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
 
+        # Stop the IAP/SSH process tree if Windows leaves it hanging.
         subprocess.run(
             [
                 "taskkill",
@@ -208,6 +214,7 @@ def compromised_key_is_active():
         stdout += extra_stdout or ""
         stderr += extra_stderr or ""
 
+        # Treat completed identity output as a successful authentication even if cleanup timed out.
         if (
             EXPECTED_USER in stdout
             and EXPECTED_HOSTNAME in stdout
@@ -229,6 +236,7 @@ def compromised_key_is_active():
     )
 
 
+# --- Read recent Wazuh alerts and keep only exact compromised-key matches ---
 def get_matching_alerts():
     command = (
         f"sudo tail -n 500 {ALERTS_FILE} "
@@ -238,6 +246,7 @@ def get_matching_alerts():
 
     result = None
 
+    # Retry transient access failures to the Wazuh Manager.
     for attempt in range(1, 4):
         result = run_wazuh_command(command)
 
@@ -279,6 +288,7 @@ def get_matching_alerts():
         full_log = alert.get("full_log", "")
         alert_id = str(alert.get("id", ""))
 
+        # Match rule, agent, auth log source, and the exact compromised fingerprint.
         if (
             alert_id
             and rule_id == COMPROMISED_RULE_ID
@@ -291,6 +301,7 @@ def get_matching_alerts():
     return matching_alerts
 
 
+# --- Select the newest matching alert only if it has not already completed recovery ---
 def unprocessed_compromised_key_alert_exists():
     matching_alerts = get_matching_alerts()
 
@@ -311,6 +322,7 @@ def unprocessed_compromised_key_alert_exists():
         )
         return False
 
+    # Save the selected ID now; it is marked processed only after full recovery succeeds.
     save_selected_alert(SCENARIO, alert_id)
 
     print("[UNPROCESSED COMPROMISED-KEY ALERT FOUND]")
@@ -338,6 +350,7 @@ def main():
         "known compromised SSH key..."
     )
 
+    # --- Recovery trigger requires both historical alert evidence and live access ---
     if not unprocessed_compromised_key_alert_exists():
         return 1
 

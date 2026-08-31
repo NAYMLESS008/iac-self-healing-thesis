@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import subprocess
 import sys
 import time
@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# --- Paths to the scripts used by this earlier end-to-end cron orchestrator ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONTROLLER_DIR = PROJECT_ROOT / "controller"
 RESULTS_FILE = PROJECT_ROOT / "results" / "orchestrator_results.csv"
@@ -15,6 +16,7 @@ CAPTURE_EVIDENCE = CONTROLLER_DIR / "capture_cron_evidence.py"
 RECOVER_REPLACE = CONTROLLER_DIR / "recover_replace.py"
 
 
+# --- Run one workflow script and measure how long it takes ---
 def run_script(script_path, args=None):
     if args is None:
         args = []
@@ -33,6 +35,7 @@ def run_script(script_path, args=None):
     return result.returncode, duration
 
 
+# --- Append one workflow result row to the CSV log ---
 def log_result(row):
     RESULTS_FILE.parent.mkdir(exist_ok=True)
 
@@ -52,6 +55,7 @@ def main():
     print(" Starting IaC Replacement Recovery Orchestrator ")
     print("================================================")
 
+    # --- Initialize workflow timing and result fields ---
     workflow_start = time.time()
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -67,7 +71,8 @@ def main():
     evidence_duration = 0
     recovery_duration = 0
 
-    # Step 1: Check Wazuh alert and confirm active persistence.
+    # --- Step 1: Wazuh alert selection + live compromise confirmation ---
+    # A return code of 0 means a matching alert exists and the cron artefact is still active.
     alert_code, detection_duration = run_script(WAZUH_ALERT_CHECK, ["--check-only"])
 
     if alert_code == 0:
@@ -80,6 +85,7 @@ def main():
 
         total_duration = round(time.time() - workflow_start, 2)
 
+        # Record the no-action outcome instead of continuing into destructive recovery.
         log_result({
             "timestamp_utc": timestamp,
             "attack_type": attack_type,
@@ -120,7 +126,7 @@ def main():
 
         return 2
 
-    # Step 2: Capture evidence before destructive replacement.
+    # --- Step 2: Evidence gate before destructive replacement ---
     evidence_code, evidence_duration = run_script(CAPTURE_EVIDENCE)
 
     if evidence_code == 0:
@@ -150,7 +156,8 @@ def main():
 
         return 3
 
-    # Step 3: Terraform-driven replacement recovery.
+    # --- Step 3: Terraform-driven replacement recovery ---
+    # recover_replace.py performs the forced replacement and its own readiness/validation logic.
     replace_code, recovery_duration = run_script(RECOVER_REPLACE)
 
     if replace_code == 0:
@@ -163,6 +170,7 @@ def main():
         error_message = "Terraform replacement recovery failed validation."
         print("[ERROR] Terraform replacement recovery failed.")
 
+    # --- Final result recording ---
     total_duration = round(time.time() - workflow_start, 2)
 
     log_result({

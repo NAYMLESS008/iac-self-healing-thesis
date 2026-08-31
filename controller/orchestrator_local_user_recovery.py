@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import subprocess
 import sys
 import time
@@ -8,12 +8,14 @@ from pathlib import Path
 from controller.alert_state import mark_selected_alert_processed
 
 
+# --- Scenario name and formal-results destination ---
 SCENARIO = "unauthorized_local_user"
 
 RESULTS_FILE = Path(
     "results/local_user_recovery_formal_results.csv"
 )
 
+# Columns recorded for each local-user recovery run.
 FIELDNAMES = [
     "timestamp_utc",
     "scenario",
@@ -45,6 +47,7 @@ FIELDNAMES = [
 ]
 
 
+# --- Run one controller module and measure how long the stage takes ---
 def run_module(module_name):
     start = time.perf_counter()
 
@@ -73,6 +76,7 @@ def run_module(module_name):
     }
 
 
+# --- Extract a named metric printed by a child module ---
 def get_metric(output, name):
     prefix = f"[METRIC] {name} = "
 
@@ -83,6 +87,7 @@ def get_metric(output, name):
     return "UNKNOWN"
 
 
+# --- Append one execution row to the formal-results CSV ---
 def save_result(row):
     RESULTS_FILE.parent.mkdir(exist_ok=True)
 
@@ -104,6 +109,7 @@ def save_result(row):
         writer.writerow(row)
 
 
+# --- Finish the run, save total duration, and return an appropriate exit code ---
 def finish(row, workflow_start, final_result):
     row["total_duration_seconds"] = round(
         time.perf_counter() - workflow_start,
@@ -128,6 +134,7 @@ def main():
     print(" Unauthorized local-user recovery workflow")
     print("==============================================")
 
+    # --- Initialize timer and default all stage fields to NOT_RUN ---
     workflow_start = time.perf_counter()
 
     row = {
@@ -156,6 +163,7 @@ def main():
         detection["duration"]
     )
 
+    # No destructive recovery is allowed if the alert/live-state trigger is absent.
     if not detection["success"]:
         return finish(
             row,
@@ -178,6 +186,7 @@ def main():
         evidence["duration"]
     )
 
+    # Read the scenario-specific checklist counts from evidence-module output.
     row["evidence_items_required"] = get_metric(
         evidence["output"],
         "evidence_items_required",
@@ -193,6 +202,7 @@ def main():
         "evidence_completeness_percentage",
     )
 
+    # Evidence capture is a hard gate before stop/replacement.
     if not evidence["success"]:
         return finish(
             row,
@@ -282,6 +292,7 @@ def main():
         validation["duration"]
     )
 
+    # These are the post-recovery security and monitoring measurements.
     metric_names = [
         "validation_indicators_total",
         "validation_indicators_passed",

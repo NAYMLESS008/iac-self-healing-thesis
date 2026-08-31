@@ -3,15 +3,20 @@ import time
 from controller.iap_helpers import run_target_command, run_wazuh_command
 
 
+# Attack-specific artefacts that must be absent after replacement.
 MALICIOUS_CRON = "/etc/cron.d/realtime_evil_persistence"
 PAYLOAD_LOG = "/tmp/realtime-cron.log"
+# Expected Wazuh agent name for manager-side restoration checks.
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 
+# Polling window for monitoring restoration: up to 60 attempts, 15 seconds apart.
 WAZUH_MAX_ATTEMPTS = 60
 WAZUH_WAIT_SECONDS = 15
 
 
 def check_cron_artifacts():
+    # Listing 4 in the report: perform explicit positive/negative checks for both
+    # cron-scenario artefacts. The validator expects CRON_ABSENT and PAYLOAD_LOG_ABSENT.
     command = (
         "echo === CRON FILE CHECK ===; "
         f"if test -f {MALICIOUS_CRON}; then echo CRON_PRESENT; "
@@ -21,20 +26,25 @@ def check_cron_artifacts():
         "else echo PAYLOAD_LOG_ABSENT; fi"
     )
 
+    # Run the checks on the replacement target through the controller's admin helper.
     return run_target_command(command)
 
 
 def wait_for_wazuh_restoration():
+    # Recovery is not accepted just because the malicious cron artefacts are gone.
+    # The replacement must also return to the study's required observable monitoring state.
     print("[CHECK] Waiting for Wazuh monitoring restoration...")
     restoration_start = time.time()
 
     for attempt in range(1, WAZUH_MAX_ATTEMPTS + 1):
+        # Check 1: local wazuh-agent systemd service must be active on the replacement VM.
         target_result = run_target_command(
             "sudo systemctl is-active wazuh-agent || true"
         )
 
         target_status = target_result["stdout"].strip()
 
+        # Check 2: look for the study-specific marker showing real-time FIM startup completed.
         fim_result = run_target_command(
             "sudo grep -Fq "
             "'Real-time file integrity monitoring started.' "
@@ -42,11 +52,13 @@ def wait_for_wazuh_restoration():
             "&& echo FIM_READY || echo FIM_NOT_READY"
         )
 
+        # Require the explicit ready marker and reject the explicit not-ready marker.
         fim_ready = (
             "FIM_READY" in fim_result["stdout"]
             and "FIM_NOT_READY" not in fim_result["stdout"]
         )
 
+        # Check 3: the trusted Wazuh Manager must list the replacement agent as Active.
         manager_result = run_wazuh_command(
             "sudo /var/ossec/bin/agent_control -l"
         )
@@ -64,6 +76,7 @@ def wait_for_wazuh_restoration():
             f"fim_realtime_ready={fim_ready}"
         )
 
+        # Monitoring restoration passes only when all three readiness conditions are true.
         if (
             target_status == "active"
             and manager_active
@@ -84,9 +97,11 @@ def wait_for_wazuh_restoration():
             )
             return True, restoration_duration
 
+        # Give the replacement monitoring stack time to finish startup before checking again.
         if attempt < WAZUH_MAX_ATTEMPTS:
             time.sleep(WAZUH_WAIT_SECONDS)
 
+    # If the polling window ends, record how long was spent waiting and fail validation.
     restoration_duration = round(
         time.time() - restoration_start,
         2,
@@ -107,6 +122,7 @@ def wait_for_wazuh_restoration():
 def main():
     print("[START] Validating cron persistence recovery")
 
+    # First validate the attack-specific security state on the replacement VM.
     result = check_cron_artifacts()
 
     if result["stdout"]:
@@ -116,15 +132,18 @@ def main():
         print("[STDERR]")
         print(result["stderr"])
 
+    # Transport/command failure is not interpreted as proof that an artefact is absent.
     if result["return_code"] != 0:
         print("[FAIL] Could not complete cron artifact validation.")
         return 1
 
     stdout = result["stdout"]
 
+    # Each explicit ABSENT marker represents one passed post-recovery condition.
     cron_absent = "CRON_ABSENT" in stdout
     payload_log_absent = "PAYLOAD_LOG_ABSENT" in stdout
 
+    # Count predefined indicators that did not pass their required absence check.
     residual_indicators = 0
 
     if not cron_absent:
@@ -133,6 +152,7 @@ def main():
     if not payload_log_absent:
         residual_indicators += 1
 
+    # Cron has exactly two predefined post-recovery indicators in this experiment.
     total_indicators = 2
     passed_indicators = total_indicators - residual_indicators
     validation_success_percentage = round(
@@ -141,6 +161,7 @@ def main():
     )
     residual_score = residual_indicators / total_indicators
 
+    # Emit the values later recorded/analysed as validation metrics.
     print(
         "[METRIC] validation_indicators_total = "
         f"{total_indicators}"
@@ -159,10 +180,12 @@ def main():
     )
     print(f"[METRIC] residual_compromise_score = {residual_score}")
 
+    # Any predefined cron residual blocks recovery acceptance.
     if residual_indicators != 0:
         print("[FAIL] Cron persistence indicators remain after recovery.")
         return 1
 
+    # Only after attack-specific indicators pass do we wait for monitoring readiness.
     (
         monitoring_restored,
         monitoring_restoration_duration,
@@ -171,6 +194,7 @@ def main():
     if not monitoring_restored:
         return 1
 
+    # Final PASS therefore means: cron indicators absent + required monitoring state restored.
     print("[SUCCESS] Malicious cron persistence is absent.")
     print("[METRIC] monitoring_restored = PASS")
     print("[RESULT] PASS")

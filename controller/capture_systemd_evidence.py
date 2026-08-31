@@ -6,6 +6,7 @@ from pathlib import Path
 from controller.iap_helpers import run_wazuh_command
 
 
+# --- Local paths and target connection settings ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 EVIDENCE_DIR = PROJECT_ROOT / "evidence"
@@ -16,6 +17,7 @@ TARGET_HOST = "thesis-self-healing-vm"
 TARGET_USER = "thesisadmin"
 
 
+# --- Load the current trusted key used to access the target ---
 def get_current_private_key():
     state = json.loads(
         STATE_FILE.read_text(encoding="utf-8")
@@ -31,7 +33,11 @@ def get_current_private_key():
     return private_key
 
 
+# --- Collect target-side systemd persistence evidence over IAP-assisted SSH ---
 def run_remote_evidence_command(private_key):
+    # The remote script records the service/unit, supporting script, enablement,
+    # active process, heartbeat artefact and hashes. It also emits explicit PASS
+    # markers that are counted later as the predefined evidence checklist.
     remote_command = r'''
 echo "=== TIMESTAMP UTC ==="
 date -u --iso-8601=seconds
@@ -214,6 +220,7 @@ else
 fi
 '''
 
+    # Use the current key through an IAP-backed OpenSSH ProxyCommand.
     proxy_command = (
         "gcloud.cmd compute start-iap-tunnel "
         f"{TARGET_HOST} %p "
@@ -257,6 +264,7 @@ fi
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
 
+        # Kill the Windows SSH/IAP process tree if transport cleanup hangs.
         subprocess.run(
             [
                 "taskkill",
@@ -271,12 +279,14 @@ fi
     return stdout, stderr
 
 
+# --- Find the exact Wazuh FIM alert for the malicious systemd unit ---
 def get_matching_wazuh_alert():
     service_path = (
         "/etc/systemd/system/"
         "thesis-persistence.service"
     )
 
+    # Search both the current alert file and compressed historical alert files.
     command = (
         "sudo grep -F "
         f"'{service_path}' "
@@ -291,6 +301,7 @@ def get_matching_wazuh_alert():
 
     result = run_wazuh_command(command)
 
+    # Dictionary keyed by alert ID removes duplicate copies of the same alert.
     matching_alerts = {}
 
     for line in result["stdout"].splitlines():
@@ -316,6 +327,7 @@ def get_matching_wazuh_alert():
     if not matching_alerts:
         return result, ""
 
+    # Choose the newest exact matching event by its Wazuh timestamp.
     newest_alert = max(
         matching_alerts.values(),
         key=lambda alert: alert.get("timestamp", ""),
@@ -323,6 +335,8 @@ def get_matching_wazuh_alert():
 
     return result, json.dumps(newest_alert)
 
+
+# --- Save evidence and enforce the ten-item evidence gate ---
 def main():
     print(
         "[INFO] Capturing malicious systemd "
@@ -339,6 +353,7 @@ def main():
         get_matching_wazuh_alert()
     )
 
+    # Nine target-side conditions plus one matching Wazuh alert = ten required items.
     target_evidence_markers = [
         "EVIDENCE_TARGET_IDENTITY=PASS",
         "EVIDENCE_SERVICE_FILE=PASS",
@@ -363,6 +378,7 @@ def main():
     if matching_alert:
         evidence_items_captured += 1
 
+    # This percentage measures completion of this predefined checklist only.
     evidence_completeness_percentage = round(
         (
             evidence_items_captured
@@ -399,6 +415,7 @@ def main():
         )
     )
 
+    # Preserve raw target and Wazuh output even if the gate later fails.
     content = (
         "MALICIOUS SYSTEMD PERSISTENCE EVIDENCE\n"
         "CAPTURED BEFORE TERRAFORM REPLACEMENT\n"
@@ -432,6 +449,7 @@ def main():
         encoding="utf-8",
     )
 
+    # Any missing required item stops the destructive recovery path.
     if (
         evidence_items_captured
         != evidence_items_required
