@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 
+# --- Files used to track and update the trusted SSH credential ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TFVARS_FILE = PROJECT_ROOT / "Terraform" / "terraform.tfvars"
 SSH_DIR = Path.home() / ".ssh"
@@ -16,6 +17,7 @@ INITIAL_PRIVATE_KEY = (
 )
 
 
+# --- Find the private key that is currently trusted before rotation ---
 def get_current_private_key():
     """
     Return the private key currently trusted by Terraform.
@@ -58,6 +60,7 @@ def get_current_private_key():
     return INITIAL_PRIVATE_KEY
 
 
+# --- Run a local command and print its output for traceability ---
 def run_command(command):
     result = subprocess.run(
         command,
@@ -75,6 +78,7 @@ def run_command(command):
     return result
 
 
+# --- Preserve the key that is about to be treated as compromised ---
 def preserve_compromised_key(timestamp):
     compromised_private = (
         SSH_DIR / f"gcp_thesis_vm_compromised_{timestamp}"
@@ -101,6 +105,7 @@ def preserve_compromised_key(timestamp):
             f"{current_public}"
         )
 
+    # copy2 keeps file metadata while creating a preserved validation copy.
     shutil.copy2(
         current_private_key,
         compromised_private,
@@ -118,6 +123,7 @@ def preserve_compromised_key(timestamp):
     return compromised_private
 
 
+# --- Generate a fresh ED25519 key pair for the replacement VM ---
 def generate_new_key(timestamp):
     new_private = (
         SSH_DIR / f"gcp_thesis_vm_rotated_{timestamp}"
@@ -148,15 +154,18 @@ def generate_new_key(timestamp):
     return new_private, new_public
 
 
+# --- Point Terraform at the newly generated public key ---
 def update_tfvars(new_public):
     original = TFVARS_FILE.read_text(
         encoding="utf-8"
     )
 
+    # Terraform accepts forward slashes in the Windows path value.
     terraform_path = str(
         new_public
     ).replace("\\", "/")
 
+    # Replace exactly one public_key_path assignment to avoid accidental edits.
     updated, replacements = re.subn(
         r'public_key_path\s*=\s*"[^"]+"',
         f'public_key_path = "{terraform_path}"',
@@ -181,6 +190,7 @@ def update_tfvars(new_public):
     )
 
 
+# --- Record old/new key paths for later attack and validation scripts ---
 def write_state(
     compromised_private,
     new_private,
@@ -213,6 +223,7 @@ def main():
         "%Y%m%d_%H%M%S"
     )
 
+    # --- Rotation sequence: preserve old key, create new key, update IaC, save state ---
     try:
         compromised_private = (
             preserve_compromised_key(timestamp)

@@ -1,4 +1,4 @@
-﻿from controller.alert_state import mark_selected_alert_processed
+from controller.alert_state import mark_selected_alert_processed
 import csv
 import re
 import subprocess
@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# --- Scenario result file and alert-state key ---
 RESULTS_DIR = Path("results")
 RESULTS_FILE = (
     RESULTS_DIR / "ssh_public_key_recovery_formal_results.csv"
@@ -15,6 +16,7 @@ RESULTS_FILE = (
 SCENARIO = "unauthorized_ssh_public_key"
 
 
+# --- Extract one [METRIC] value from validator/evidence stdout ---
 def extract_metric(output, metric_name, default=""):
     pattern = re.compile(
         rf"^\[METRIC\]\s+{re.escape(metric_name)}\s*=\s*(.+?)\s*$",
@@ -25,6 +27,7 @@ def extract_metric(output, metric_name, default=""):
     return match.group(1).strip() if match else default
 
 
+# --- Execute one recovery stage and measure its duration ---
 def run_step(name, command):
     print(f"\n[STEP] {name}")
     started = time.time()
@@ -57,6 +60,7 @@ def run_step(name, command):
     }
 
 
+# --- Append the complete/partial formal run to its CSV ---
 def write_result(row):
     RESULTS_DIR.mkdir(exist_ok=True)
     exists = RESULTS_FILE.exists()
@@ -77,6 +81,7 @@ def write_result(row):
         writer.writerow(row)
 
 
+# --- Stop at a failed workflow gate and record the partial result ---
 def stop_and_log(reason, row, workflow_start):
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
@@ -99,6 +104,7 @@ def main():
     print(" Starting SSH public-key recovery orchestrator ")
     print("================================================")
 
+    # --- Initialize the end-to-end timer and result fields ---
     workflow_start = time.time()
 
     row = {
@@ -133,6 +139,7 @@ def main():
         "final_result": "",
     }
 
+    # --- Stage 1: Select Wazuh FIM alert and confirm the unauthorized key still exists ---
     detection = run_step(
         "Wazuh detection and active SSH-key confirmation",
         [
@@ -156,6 +163,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 2: Capture authorized_keys metadata/content + matching Wazuh evidence ---
     evidence = run_step(
         "Evidence capture before replacement",
         [
@@ -187,6 +195,7 @@ def main():
         "UNKNOWN",
     )
 
+    # Evidence is a hard gate before the compromised VM is stopped/destroyed.
     if not evidence["success"]:
         return stop_and_log(
             "FAILED_EVIDENCE_CAPTURE",
@@ -194,6 +203,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 3: Stop the compromised VM ---
     quarantine = run_step(
         "Quarantine compromised target VM",
         [
@@ -217,6 +227,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 4: Remove the previous Wazuh agent registration ---
     cleanup = run_step(
         "Remove stale Wazuh agent registration",
         [
@@ -240,6 +251,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 5: Force Terraform to destroy/recreate the target from IaC ---
     replacement = run_step(
         "Terraform replacement recovery",
         [
@@ -263,6 +275,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 6: Verify unauthorized key indicators are absent + Wazuh/FIM ready ---
     validation = run_step(
         "Post-recovery SSH-key and monitoring validation",
         [
@@ -279,6 +292,7 @@ def main():
         validation["duration"]
     )
 
+    # Collect all validation/monitoring metrics printed by the validator.
     for metric in [
         "validation_indicators_total",
         "validation_indicators_passed",
@@ -295,6 +309,7 @@ def main():
             "UNKNOWN",
         )
 
+    # --- Final result and end-to-end duration ---
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
         2,
@@ -303,6 +318,7 @@ def main():
         "PASS" if validation["success"] else "FAIL"
     )
 
+    # The selected alert becomes processed only after a fully successful run.
     if validation["success"]:
         if not mark_selected_alert_processed(SCENARIO):
             return stop_and_log(

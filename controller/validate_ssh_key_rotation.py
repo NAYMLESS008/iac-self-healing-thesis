@@ -1,10 +1,11 @@
-﻿import csv
+import csv
 import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 
+# --- Files and expected identity used during SSH credential validation ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 EVIDENCE_DIR = PROJECT_ROOT / "evidence"
@@ -18,6 +19,7 @@ ZONE = "europe-west1-b"
 TARGET_HOST = "thesis-self-healing-vm"
 
 
+# --- Load the old compromised key and the new trusted key from rotation state ---
 def load_rotation_state():
     if not STATE_FILE.exists():
         raise FileNotFoundError(
@@ -43,6 +45,7 @@ def load_rotation_state():
     return state
 
 
+# --- Test one private key against the replacement VM through IAP ---
 def run_key_test(private_key):
     proxy_command = (
         "gcloud.cmd compute start-iap-tunnel "
@@ -92,6 +95,7 @@ def run_key_test(private_key):
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
 
+        # Kill the whole Windows process group if the IAP proxy does not exit cleanly.
         subprocess.run(
             [
                 "taskkill",
@@ -114,8 +118,7 @@ def run_key_test(private_key):
         stdout += remaining_stdout or ""
         stderr += remaining_stderr or ""
 
-        # Authentication result may already be complete even
-        # though the Windows IAP proxy failed to terminate.
+        # Authentication may already have completed even if the IAP proxy cleanup timed out.
         if (
             EXPECTED_USER in stdout
             and EXPECTED_HOSTNAME in stdout
@@ -139,6 +142,7 @@ def run_key_test(private_key):
 
 
 def main():
+    # --- Prepare result/evidence locations and load rotation state ---
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     readable_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -156,9 +160,11 @@ def main():
         state["compromised_private_key"]
     )
 
+    # --- Positive test: the newly trusted key must authenticate ---
     print("[INFO] Testing new trusted SSH key...")
     new_key_result = run_key_test(new_private_key)
 
+    # --- Negative test: the old compromised key must be rejected ---
     print("[INFO] Testing old compromised SSH key...")
     old_key_result = run_key_test(
         compromised_private_key
@@ -178,6 +184,7 @@ def main():
         )
     )
 
+    # One residual indicator is tracked here: whether the old key still works.
     residual_compromise_count = (
         0 if old_key_denied else 1
     )
@@ -185,12 +192,14 @@ def main():
         0 if old_key_denied else 1
     )
 
+    # Recovery passes only when the new key works AND the old key is denied.
     final_result = (
         "PASS"
         if new_key_success and old_key_denied
         else "FAIL"
     )
 
+    # --- Save the raw validation evidence for both key tests ---
     evidence_file = (
         EVIDENCE_DIR
         / f"ssh_key_rotation_validation_{timestamp}.txt"
@@ -237,6 +246,7 @@ final_result={final_result}
         encoding="utf-8",
     )
 
+    # --- Append the structured result used by later analysis ---
     file_exists = RESULTS_FILE.exists()
 
     fieldnames = [

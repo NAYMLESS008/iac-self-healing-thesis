@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 
+# --- Project paths and target connection settings ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 
@@ -13,9 +14,12 @@ TARGET_USER = "thesisadmin"
 ZONE = "europe-west1-b"
 PROJECT_ID = "project-207ee30d-2273-45b0-8a0"
 
+# Controlled TCP port used for the runtime network-footprint scenario.
+# This listener is a runtime foothold; it is not reboot-persistent.
 PORT = 4444
 
 
+# --- Load the current private key used to administer the target ---
 def get_current_private_key():
     if not STATE_FILE.exists():
         raise FileNotFoundError(
@@ -43,9 +47,12 @@ def get_current_private_key():
     return private_key
 
 
+# --- Create and confirm the controlled unexpected TCP listener ---
 def main():
     private_key = get_current_private_key()
 
+    # The remote script starts a harmless Python HTTP server on port 4444,
+    # stores its PID/log, and confirms both the process and listening socket.
     attack_script = rf'''set -e
 
 PID_FILE=/var/tmp/thesis-unexpected-listener.pid
@@ -72,10 +79,12 @@ echo "PID=$listener_pid"
 echo UNEXPECTED_LISTENER_CREATED
 '''
 
+    # Encode the multi-line script so it can be transferred safely through SSH.
     encoded = base64.b64encode(
         attack_script.encode("utf-8")
     ).decode("ascii")
 
+    # IAP provides the tunnel used for the controller's SSH connection.
     proxy_command = (
         "gcloud.cmd compute start-iap-tunnel "
         f"{TARGET_HOST} %p "
@@ -101,6 +110,7 @@ echo UNEXPECTED_LISTENER_CREATED
         f"[INFO] Creating unexpected TCP listener on port {PORT}..."
     )
 
+    # Keep a process handle so a hung Windows SSH/IAP process tree can be stopped.
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -148,6 +158,7 @@ echo UNEXPECTED_LISTENER_CREATED
     if stderr:
         print(stderr.strip())
 
+    # Explicit success marker prevents empty/noisy transport output being treated as success.
     if "UNEXPECTED_LISTENER_CREATED" not in stdout:
         print(
             "[ERROR] Unexpected listener was not confirmed."

@@ -3,9 +3,11 @@
 from controller.iap_helpers import run_wazuh_command
 
 
+# --- Wazuh identity used by the replaceable target VM ---
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 
 
+# --- List registrations currently stored on the Wazuh Manager ---
 def list_agents():
     return run_wazuh_command(
         "sudo /var/ossec/bin/manage_agents -l",
@@ -13,6 +15,7 @@ def list_agents():
     )
 
 
+# --- Find the numeric Wazuh agent ID belonging to the old target ---
 def extract_agent_id(output):
     for line in output.splitlines():
         line = line.strip()
@@ -20,6 +23,7 @@ def extract_agent_id(output):
         if f"Name: {TARGET_AGENT_NAME}" not in line:
             continue
 
+        # manage_agents prints comma-separated fields such as ID and Name.
         for part in line.split(","):
             part = part.strip()
 
@@ -29,7 +33,9 @@ def extract_agent_id(output):
     return None
 
 
+# --- Remove the old target registration from the manager ---
 def remove_agent(agent_id):
+    # Pipe 'y' because manage_agents asks for interactive confirmation.
     command = (
         f"printf 'y\\n' | "
         f"sudo /var/ossec/bin/manage_agents -r {agent_id}"
@@ -38,6 +44,7 @@ def remove_agent(agent_id):
     return run_wazuh_command(command, timeout=60)
 
 
+# --- Wait for the Wazuh Manager service after its restart ---
 def wait_for_manager():
     for attempt in range(1, 13):
         result = run_wazuh_command(
@@ -61,6 +68,7 @@ def wait_for_manager():
     return False
 
 
+# --- Clean the stale identity before the replacement agent enrols ---
 def main():
     print("[INFO] Checking Wazuh Manager for stale target agent entry...")
 
@@ -73,6 +81,7 @@ def main():
 
     agent_id = extract_agent_id(result["stdout"])
 
+    # No existing registration means there is nothing to clean up.
     if not agent_id:
         print("[OK] No stale Wazuh agent entry found.")
         return 0
@@ -110,6 +119,8 @@ def main():
 
     print("[SUCCESS] Stale Wazuh agent entry removal verified.")
 
+    # Restart the manager so the updated registration state is active before
+    # the freshly recreated target attempts to enrol/connect.
     restart_result = run_wazuh_command(
         "sudo systemctl restart wazuh-manager",
         timeout=90

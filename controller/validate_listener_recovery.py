@@ -9,6 +9,7 @@ except ModuleNotFoundError:
     from iap_helpers import run_wazuh_command
 
 
+# --- Local state, target connection and scenario artefacts ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = PROJECT_ROOT / "controller" / "ssh_rotation_state.json"
 
@@ -26,6 +27,7 @@ WAZUH_MAX_ATTEMPTS = 60
 WAZUH_WAIT_SECONDS = 15
 
 
+# --- Load the current trusted key for the newly replaced target ---
 def get_current_private_key():
     state = json.loads(
         STATE_FILE.read_text(encoding="utf-8-sig")
@@ -41,6 +43,7 @@ def get_current_private_key():
     return private_key
 
 
+# --- Run one target command through an explicit IAP-backed SSH process ---
 def run_target_command(command):
     private_key = get_current_private_key()
 
@@ -91,6 +94,7 @@ def run_target_command(command):
         if isinstance(stderr, bytes):
             stderr = stderr.decode(errors="replace")
 
+        # Stop the Windows SSH/IAP process tree if it fails to exit cleanly.
         subprocess.run(
             [
                 "taskkill",
@@ -102,6 +106,8 @@ def run_target_command(command):
             text=True,
         )
 
+        # If usable explicit output was already returned, preserve it for the
+        # marker checks; otherwise return a timeout code.
         return_code = 0 if stdout.strip() else 124
 
     return {
@@ -111,7 +117,9 @@ def run_target_command(command):
     }
 
 
+# --- Check the four predefined listener residual indicators ---
 def check_listener_artifacts():
+    # Recovery requires the socket, exact process, PID file and log file all absent.
     command = (
         f"if ss -H -lnt 'sport = :{PORT}' | grep -q .; "
         "then echo PORT_PRESENT; "
@@ -136,6 +144,8 @@ def check_listener_artifacts():
         "else echo LOG_FILE_ABSENT; fi"
     )
 
+    # Each group contains the two valid answers for one check. This lets the
+    # controller distinguish complete output from a transport-truncated response.
     marker_groups = [
         ("PORT_ABSENT", "PORT_PRESENT"),
         ("PROCESS_ABSENT", "PROCESS_PRESENT"),
@@ -149,6 +159,7 @@ def check_listener_artifacts():
         "stderr": "",
     }
 
+    # Retry up to three times until every check returns an explicit marker.
     for attempt in range(1, 4):
         last_result = run_target_command(command)
         output = last_result["stdout"]
@@ -178,6 +189,7 @@ def check_listener_artifacts():
     return last_result
 
 
+# --- Wait for local agent, manager visibility and real-time FIM readiness ---
 def wait_for_wazuh_restoration():
     print(
         "[CHECK] Waiting for Wazuh monitoring restoration..."
@@ -225,6 +237,7 @@ def wait_for_wazuh_restoration():
             f"fim_realtime_ready={fim_ready}"
         )
 
+        # Full readiness is a conjunction: local active AND manager active AND FIM ready.
         if (
             target_status == "active"
             and manager_active
@@ -276,6 +289,7 @@ def wait_for_wazuh_restoration():
     return False, restoration_duration
 
 
+# --- Decide whether listener recovery satisfies the completion gate ---
 def main():
     print(
         "[START] Validating unexpected-listener recovery"
@@ -297,6 +311,7 @@ def main():
         "LOG_FILE_ABSENT",
     ]
 
+    # Count any required absence marker that was not positively observed.
     residual_indicators = sum(
         marker not in result["stdout"]
         for marker in required_absent_markers
@@ -345,6 +360,7 @@ def main():
         f"{residual_score}"
     )
 
+    # Do not continue to the monitoring gate if any listener artefact remains.
     if residual_indicators != 0:
         print(
             "[FAIL] Unexpected-listener indicators "

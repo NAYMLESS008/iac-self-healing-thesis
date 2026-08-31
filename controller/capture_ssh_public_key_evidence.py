@@ -7,11 +7,13 @@ from controller.iap_helpers import (
 )
 
 
+# --- Scenario artefact, marker and evidence destination ---
 AUTHORIZED_KEYS = "/home/thesisadmin/.ssh/authorized_keys"
 ATTACK_MARKER = "THESIS_UNAUTHORIZED_SSH_KEY"
 EVIDENCE_DIR = Path("evidence")
 
 
+# --- Run one target-side evidence command and preserve its raw result ---
 def target_section(title, command):
     result = run_target_command(command)
 
@@ -25,6 +27,7 @@ def target_section(title, command):
     return result, section
 
 
+# --- Capture all required SSH public-key evidence before replacement ---
 def main():
     print(
         "[START] Capturing unauthorized SSH "
@@ -44,12 +47,14 @@ def main():
 
     sections = []
 
+    # 1. Record target identity and capture time/user.
     identity_result, section = target_section(
         "TARGET IDENTITY",
         "date --iso-8601=seconds; hostname; whoami",
     )
     sections.append(section)
 
+    # 2. Preserve the exact unauthorized-key marker from authorized_keys.
     key_result, section = target_section(
         "UNAUTHORIZED KEY ENTRY",
         (
@@ -61,6 +66,7 @@ def main():
     )
     sections.append(section)
 
+    # 3-4. Capture file metadata and a SHA-256 fingerprint of its contents.
     stat_result, section = target_section(
         "AUTHORIZED_KEYS METADATA",
         f"sudo stat {AUTHORIZED_KEYS}",
@@ -73,6 +79,7 @@ def main():
     )
     sections.append(section)
 
+    # 5. Record that the SSH service involved in the scenario is active.
     ssh_result, section = target_section(
         "SSH SERVICE STATUS",
         (
@@ -82,6 +89,7 @@ def main():
     )
     sections.append(section)
 
+    # 6. Preserve the matching Wazuh FIM event for authorized_keys.
     wazuh_result = run_wazuh_command(
         "sudo grep -F "
         f"'{AUTHORIZED_KEYS}' "
@@ -97,6 +105,7 @@ def main():
         f"stderr:\n{wazuh_result['stderr']}\n"
     )
 
+    # Save raw evidence before evaluating the checklist.
     evidence_file.write_text(
         (
             "UNAUTHORIZED SSH PUBLIC-KEY "
@@ -110,6 +119,7 @@ def main():
         encoding="utf-8",
     )
 
+    # --- Six predefined evidence checklist items ---
     checks = {
         "target_identity": (
             identity_result["return_code"] == 0
@@ -156,6 +166,7 @@ def main():
         f"{percentage}"
     )
 
+    # Evidence is mandatory: any missing predefined item blocks later recovery.
     if captured != required:
         print(
             "[FAIL] SSH public-key evidence capture "

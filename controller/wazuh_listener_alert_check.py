@@ -18,6 +18,7 @@ except ModuleNotFoundError:
     from iap_helpers import run_wazuh_command
 
 
+# --- Scenario-specific Wazuh and target values ---
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 SCENARIO = "unexpected_listener"
 PORT = 4444
@@ -29,6 +30,7 @@ TARGET_HOST = "thesis-self-healing-vm"
 TARGET_USER = "thesisadmin"
 
 
+# --- Load the current trusted SSH key for live target checks ---
 def get_current_private_key():
     state_file = (
         Path(__file__).resolve().parents[1]
@@ -50,9 +52,12 @@ def get_current_private_key():
     return private_key
 
 
+# --- Live check: confirm both the port and expected listener process exist ---
 def target_listener_exists():
     private_key = get_current_private_key()
 
+    # The socket alone is not enough: this script also checks the PID file and
+    # exact process command so an unrelated service on port 4444 is not accepted.
     check_script = rf"""set -u
 
 if ss -H -lnt 'sport = :{PORT}' | grep -q .; then
@@ -84,6 +89,7 @@ printf '%s|%s\n' "$port_state" "$process_state"
 echo TARGET_LISTENER_CHECK_COMPLETE
 """
 
+    # Base64 preserves the multi-line shell script through the SSH command.
     encoded = base64.b64encode(
         check_script.encode("utf-8")
     ).decode("ascii")
@@ -152,6 +158,7 @@ echo TARGET_LISTENER_CHECK_COMPLETE
 
     output = stdout.strip()
 
+    # Pull out the compact PORT|PROCESS state line for readable console output.
     state_line = next(
         (
             line
@@ -163,12 +170,14 @@ echo TARGET_LISTENER_CHECK_COMPLETE
 
     print(f"[TARGET STATE] {state_line}")
 
+    # The runtime foothold is active only if both conditions and completion marker exist.
     return (
         "PRESENT|PROCESS_PRESENT" in output
         and "TARGET_LISTENER_CHECK_COMPLETE" in output
     )
 
 
+# --- Select the exact unprocessed Wazuh listener alert ---
 def unprocessed_wazuh_alert_exists():
     remote_command = (
         "sudo grep -F "
@@ -208,6 +217,7 @@ def unprocessed_wazuh_alert_exists():
         location = alert.get("location", "")
         full_log = alert.get("full_log", "")
 
+        # Require the expected target, custom rule, command-monitor location and marker.
         if (
             alert_id
             and agent_name == TARGET_AGENT_NAME
@@ -239,6 +249,7 @@ def unprocessed_wazuh_alert_exists():
         )
         return False
 
+    # Store the exact selected alert until the recovery workflow finishes.
     save_selected_alert(
         SCENARIO,
         alert_id,
@@ -253,6 +264,7 @@ def unprocessed_wazuh_alert_exists():
     return True
 
 
+# --- Recovery gate: historical alert plus current live listener state ---
 def recoverable_alert_exists():
     if not unprocessed_wazuh_alert_exists():
         return False
@@ -276,6 +288,7 @@ def recoverable_alert_exists():
     return False
 
 
+# --- Entry point used by the listener recovery orchestrator ---
 def main():
     check_only = "--check-only" in sys.argv
 

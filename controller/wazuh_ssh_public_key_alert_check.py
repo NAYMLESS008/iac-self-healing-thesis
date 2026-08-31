@@ -11,13 +11,17 @@ from controller.iap_helpers import (
 )
 
 
+# --- Scenario-specific paths and markers ---
 AUTHORIZED_KEYS = "/home/thesisadmin/.ssh/authorized_keys"
 ATTACK_MARKER = "THESIS_UNAUTHORIZED_SSH_KEY"
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 SCENARIO = "unauthorized_ssh_public_key"
 
 
+# --- Live check: is the injected unauthorized key still present? ---
 def target_persistence_exists():
+    # Retry because IAP/SSH can occasionally return incomplete output.
+    # Only explicit PRESENT/ABSENT markers are accepted as a known state.
     for attempt in range(1, 4):
         result = run_target_command(
             f"if sudo grep -Fq '{ATTACK_MARKER}' {AUTHORIZED_KEYS}; "
@@ -45,6 +49,7 @@ def target_persistence_exists():
     return False
 
 
+# --- Select an exact unprocessed Wazuh FIM alert for authorized_keys ---
 def unprocessed_wazuh_alert_exists():
     command = (
         "sudo grep -F "
@@ -74,6 +79,7 @@ def unprocessed_wazuh_alert_exists():
         event = syscheck.get("event")
         groups = alert.get("rule", {}).get("groups", [])
 
+        # Match the expected target, exact file, FIM event type and syscheck group.
         if (
             alert_id
             and agent_name == TARGET_AGENT_NAME
@@ -97,6 +103,7 @@ def unprocessed_wazuh_alert_exists():
         )
         return False
 
+    # Remember this exact alert until the full workflow has completed successfully.
     save_selected_alert(SCENARIO, alert_id)
 
     print("[UNPROCESSED WAZUH SSH PUBLIC-KEY ALERT FOUND]")
@@ -106,6 +113,7 @@ def unprocessed_wazuh_alert_exists():
     return True
 
 
+# --- Recovery gate: Wazuh history must agree with current target state ---
 def recoverable_alert_exists():
     if not unprocessed_wazuh_alert_exists():
         return False
@@ -129,6 +137,7 @@ def recoverable_alert_exists():
     return False
 
 
+# --- Entry point used by the recovery orchestrator ---
 def main():
     print(
         "[1] Checking Wazuh for an unprocessed "

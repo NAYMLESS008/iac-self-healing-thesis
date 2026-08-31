@@ -4,10 +4,12 @@ from pathlib import Path
 from controller.iap_helpers import run_target_command, run_wazuh_command
 
 
+# --- Scenario marker and local evidence destination ---
 BACKDOOR_USER = "thesisbackdoor"
 EVIDENCE_DIR = Path("evidence")
 
 
+# --- Run one target-side evidence check and retain raw output ---
 def run_target_section(title, command):
     result = run_target_command(command)
 
@@ -21,6 +23,7 @@ def run_target_section(title, command):
     return result, section
 
 
+# --- Capture the required unauthorized-user evidence before replacement ---
 def main():
     print("[START] Capturing unauthorized local-user evidence")
 
@@ -34,12 +37,14 @@ def main():
 
     sections = []
 
+    # 1. Target identity and capture time.
     identity_result, section = run_target_section(
         "TARGET IDENTITY",
         "date --iso-8601=seconds; hostname"
     )
     sections.append(section)
 
+    # 2. Account identity/passwd details for the controlled unauthorized user.
     user_result, section = run_target_section(
         "USER ACCOUNT DETAILS",
         (
@@ -51,6 +56,7 @@ def main():
     )
     sections.append(section)
 
+    # 3. Confirm the account's group membership, including sudo privilege.
     group_result, section = run_target_section(
         "GROUP MEMBERSHIP",
         (
@@ -61,6 +67,7 @@ def main():
     )
     sections.append(section)
 
+    # 4. Preserve metadata for the account's home directory.
     home_result, section = run_target_section(
         "HOME DIRECTORY METADATA",
         (
@@ -71,6 +78,7 @@ def main():
     )
     sections.append(section)
 
+    # 5-7. Preserve the passwd, shadow and sudo-group records related to the account.
     passwd_result, section = run_target_section(
         "PASSWD ENTRY",
         f"sudo grep '^{BACKDOOR_USER}:' /etc/passwd || true"
@@ -89,6 +97,7 @@ def main():
     )
     sections.append(section)
 
+    # 8. Preserve the matching Wazuh account-creation alert from the manager.
     wazuh_result = run_wazuh_command(
         "sudo grep -F "
         f"'{BACKDOOR_USER}' "
@@ -103,6 +112,7 @@ def main():
         f"stderr:\n{wazuh_result['stderr']}\n"
     )
 
+    # Save raw sections first, even if one of the later checklist tests fails.
     evidence_text = (
         "UNAUTHORIZED LOCAL-USER EVIDENCE\n"
         f"capture_timestamp_utc: "
@@ -113,6 +123,7 @@ def main():
 
     evidence_file.write_text(evidence_text, encoding="utf-8")
 
+    # --- Convert collected output into the eight predefined evidence items ---
     identity_captured = (
         identity_result["return_code"] == 0
         and bool(identity_result["stdout"].strip())
@@ -168,6 +179,7 @@ def main():
         "wazuh_alert": wazuh_captured,
     }
 
+    # Completeness here means all predefined scenario items were captured.
     evidence_items_required = len(evidence_checks)
     evidence_items_captured = sum(evidence_checks.values())
 
@@ -197,6 +209,7 @@ def main():
         status = "PASS" if captured else "FAIL"
         print(f"[EVIDENCE] {item_name} = {status}")
 
+    # Evidence capture is a mandatory gate: any missing item stops the workflow.
     if evidence_items_captured != evidence_items_required:
         print("[FAIL] Unauthorized-user evidence capture incomplete.")
         print(f"[INFO] Partial evidence saved to: {evidence_file}")

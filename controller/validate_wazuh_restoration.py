@@ -1,4 +1,4 @@
-﻿import time
+import time
 
 from controller.iap_helpers import (
     run_target_command,
@@ -6,6 +6,7 @@ from controller.iap_helpers import (
 )
 
 
+# --- Monitoring restoration settings ---
 TARGET_AGENT_NAME = "thesis-self-healing-vm"
 MAX_ATTEMPTS = 12
 WAIT_SECONDS = 15
@@ -14,6 +15,9 @@ WAIT_SECONDS = 15
 def main():
     print("[START] Validating Wazuh monitoring restoration")
 
+    # --- Poll both sides of the Wazuh connection after VM replacement ---
+    # Local check: the replacement VM's wazuh-agent service is running.
+    # Manager check: the manager lists the replacement target as Active.
     for attempt in range(1, MAX_ATTEMPTS + 1):
         target_result = run_target_command(
             "sudo systemctl is-active wazuh-agent || true"
@@ -37,6 +41,7 @@ def main():
             f"manager_active={manager_active}"
         )
 
+        # Both checks must succeed before basic monitoring restoration passes.
         if local_status == "active" and manager_active:
             print("[SUCCESS] Wazuh monitoring restored.")
             return 0

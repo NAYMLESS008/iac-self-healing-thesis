@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 
+# --- Dataset and output locations ---
 RESULTS_DIR = Path("results")
 FIGURES_DIR = RESULTS_DIR / "figures"
 
@@ -19,6 +20,7 @@ OUTPUT_FILE = (
     / "figure_1_total_workflow_duration_by_scenario.png"
 )
 
+# Fixed display order keeps the figure consistent with the report.
 SCENARIO_ORDER = [
     "Unauthorized SSH public-key persistence",
     "Unauthorized local user",
@@ -29,6 +31,7 @@ SCENARIO_ORDER = [
 ]
 
 
+# --- Read one CSV into a list of dictionaries ---
 def read_rows(path):
     with path.open(
         newline="",
@@ -37,6 +40,7 @@ def read_rows(path):
         return list(csv.DictReader(file))
 
 
+# --- Create small horizontal offsets so repeated run markers do not overlap ---
 def create_offsets(count):
     if count == 1:
         return [0.0]
@@ -52,6 +56,7 @@ def create_offsets(count):
 
 
 def main():
+    # --- Prepare output directory and load the frozen main dataset ---
     FIGURES_DIR.mkdir(
         parents=True,
         exist_ok=True,
@@ -59,6 +64,7 @@ def main():
 
     rows = read_rows(MAIN_FILE)
 
+    # Group the recorded total workflow durations by scenario label.
     durations_by_scenario = {
         scenario: []
         for scenario in SCENARIO_ORDER
@@ -72,6 +78,7 @@ def main():
                 float(row["total_duration_seconds"])
             )
 
+    # --- Draw each included run as a point and the scenario mean as a line ---
     figure, axis = plt.subplots(
         figsize=(12, 7),
     )
@@ -118,6 +125,7 @@ def main():
             fontsize=9,
         )
 
+    # --- Human-readable axis labels used in the report figure ---
     display_labels = [
         "SSH public-key\npersistence",
         "Unauthorized\nlocal user",
@@ -152,6 +160,7 @@ def main():
         alpha=0.5,
     )
 
+    # Legend explains the point markers versus horizontal mean lines.
     legend_items = [
         Line2D(
             [0],
@@ -173,6 +182,7 @@ def main():
         loc="upper right",
     )
 
+    # --- Save a high-resolution PNG for the report ---
     figure.tight_layout()
 
     figure.savefig(

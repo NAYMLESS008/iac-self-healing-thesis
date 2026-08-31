@@ -1,12 +1,14 @@
-﻿import csv
+import csv
 from pathlib import Path
 
 
+# --- Input summary produced by the analysis pipeline and thesis table output ---
 source = Path("results/results_summary_by_scenario.csv")
 output = Path("results/table_1_workflow_performance_summary.csv")
 
 rows = []
 
+# --- Read each scenario summary and rename fields into report-friendly headings ---
 with source.open(
     newline="",
     encoding="utf-8-sig",
@@ -48,6 +50,7 @@ with source.open(
             }
         )
 
+# --- Write the compact CSV used to build the workflow-performance table ---
 with output.open(
     "w",
     newline="",

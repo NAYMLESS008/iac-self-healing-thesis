@@ -5,11 +5,13 @@ import sys
 from pathlib import Path
 
 # Project paths
+# --- Project files used by the baseline monitor ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_FILE = PROJECT_ROOT / "controller" / "baseline.json"
 TERRAFORM_DIR = PROJECT_ROOT / "terraform"
 
 
+# --- Run a local command and stop immediately if it fails ---
 def run_command(command):
     """
     Runs a command on Windows and returns the output.
@@ -31,6 +33,7 @@ def run_command(command):
     return result.stdout.strip()
 
 
+# --- Ask Terraform for the current target VM IP instead of hardcoding it ---
 def get_vm_ip_from_terraform():
     """
     Asks Terraform for the VM external IP.
@@ -40,6 +43,7 @@ def get_vm_ip_from_terraform():
     return run_command(command)
 
 
+# --- Read the VM's live authorized_keys file over SSH ---
 def get_authorized_keys(vm_user, vm_ip):
     """
     Uses SSH to read ~/.ssh/authorized_keys from the VM.
@@ -60,6 +64,7 @@ def get_authorized_keys(vm_user, vm_ip):
         line = line.strip()
 
         # Ignore empty lines and Google-added comment lines.
+        # Ignore empty lines and Google-added comment lines before comparison.
         if not line or line.startswith("#"):
             continue
 
@@ -71,6 +76,7 @@ def get_authorized_keys(vm_user, vm_ip):
 def main():
     print("=== Self-Healing Monitor: SSH Authorized Keys Check ===")
 
+    # --- Load the trusted SSH-key baseline ---
     with open(BASELINE_FILE, "r", encoding="utf-8") as file:
         baseline = json.load(file)
 
@@ -86,6 +92,7 @@ def main():
     print("[INFO] Reading current authorized_keys from VM...")
     current_keys = get_authorized_keys(vm_user, vm_ip)
 
+    # --- Compare runtime SSH keys with the trusted baseline ---
     extra_keys = [key for key in current_keys if key not in allowed_keys]
     missing_keys = [key for key in allowed_keys if key not in current_keys]
 

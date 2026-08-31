@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import subprocess
 import sys
 import time
@@ -8,6 +8,7 @@ from pathlib import Path
 from controller.alert_state import mark_selected_alert_processed
 
 
+# --- Result file and scenario name for the stolen trusted-key workflow ---
 RESULTS_DIR = Path("results")
 RESULTS_FILE = (
     RESULTS_DIR / "ssh_key_recovery_orchestrator_results.csv"
@@ -15,6 +16,7 @@ RESULTS_FILE = (
 
 SCENARIO = "stolen_trusted_ssh_key"
 
+# Columns recorded for each execution of this workflow.
 FIELDNAMES = [
     "timestamp_utc",
     "scenario",
@@ -42,6 +44,7 @@ FIELDNAMES = [
 ]
 
 
+# --- Run one controller module as a stage and return success + duration ---
 def run_step(description, module_name):
     print(f"\n[STEP] {description}")
 
@@ -71,6 +74,7 @@ def run_step(description, module_name):
     return result.returncode == 0, duration
 
 
+# --- Create a blank result row before any stages run ---
 def create_result_row():
     return {
         "timestamp_utc": datetime.now(
@@ -101,6 +105,7 @@ def create_result_row():
     }
 
 
+# --- Append the run row to the scenario CSV ---
 def write_result(row):
     RESULTS_DIR.mkdir(exist_ok=True)
 
@@ -122,6 +127,7 @@ def write_result(row):
         writer.writerow(row)
 
 
+# --- Stop at a failed stage, calculate total time, and save the partial result ---
 def stop_and_log(
     result_name,
     row,
@@ -153,9 +159,11 @@ def main():
     print(" Starting stolen SSH-key recovery workflow ")
     print("================================================")
 
+    # --- Initialize end-to-end timing and the result record ---
     workflow_start = time.perf_counter()
     row = create_result_row()
 
+    # --- Stage 1: Find a matching Wazuh alert and prove the compromised key still works ---
     success, duration = run_step(
         "Wazuh detection and compromised-key confirmation",
         "controller.wazuh_ssh_key_alert_check",
@@ -175,6 +183,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 2: Capture evidence while the compromised key still authenticates ---
     success, duration = run_step(
         "Evidence capture before replacement",
         "controller.capture_ssh_key_evidence",
@@ -194,6 +203,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 3: Stop the compromised VM ---
     success, duration = run_step(
         "Quarantine compromised target VM",
         "controller.quarantine_target",
@@ -213,6 +223,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 4: Remove the stale target registration from Wazuh ---
     success, duration = run_step(
         "Remove stale Wazuh agent registration",
         "controller.remove_stale_wazuh_agent",
@@ -232,6 +243,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 5: Generate a fresh SSH key and update Terraform to trust it ---
     success, duration = run_step(
         "Generate and register replacement SSH key",
         "controller.rotate_compromised_ssh_key",
@@ -251,6 +263,7 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 6: Recreate the VM from Terraform using the new trusted key ---
     success, duration = run_step(
         "Terraform replacement recovery",
         "controller.recover_replace",
@@ -270,6 +283,8 @@ def main():
             workflow_start,
         )
 
+    # --- Stage 7: Positive/negative SSH validation ---
+    # The new key must work and the preserved old compromised key must be denied.
     success, duration = run_step(
         "Validate new key and revoke compromised key",
         "controller.validate_ssh_key_rotation",
@@ -291,11 +306,13 @@ def main():
             workflow_start,
         )
 
+    # These values are known once the key-rotation validator returns success.
     row["new_key_success"] = "PASS"
     row["old_key_denied"] = "PASS"
     row["residual_compromise_count"] = "0/1"
     row["residual_compromise_score"] = "0"
 
+    # --- Stage 8: Confirm the replacement Wazuh agent is active on both ends ---
     success, duration = run_step(
         "Validate Wazuh monitoring restoration",
         "controller.validate_wazuh_restoration",
@@ -312,6 +329,7 @@ def main():
             workflow_start,
         )
 
+    # --- Commit alert state only after the full workflow succeeds ---
     if not mark_selected_alert_processed(
         SCENARIO
     ):
@@ -321,6 +339,7 @@ def main():
             workflow_start,
         )
 
+    # --- Final PASS and total end-to-end time ---
     total_duration = round(
         time.perf_counter() - workflow_start,
         2,

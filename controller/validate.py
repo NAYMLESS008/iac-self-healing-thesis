@@ -3,13 +3,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-
+# --- Paths and files used by this SSH-access validation helper ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASELINE_FILE = PROJECT_ROOT / "controller" / "baseline.json"
 TERRAFORM_DIR = PROJECT_ROOT / "Terraform"
 ATTACKER_KEY = PROJECT_ROOT / "attacks" / "attacker_key"
 
 
+# --- Ask Terraform for the current replacement VM IP ---
 def get_vm_ip_from_terraform():
     result = subprocess.run(
         ["terraform", f"-chdir={TERRAFORM_DIR}", "output", "-raw", "external_ip"],
@@ -33,6 +34,7 @@ def get_vm_ip_from_terraform():
         
 
 
+# --- Try to authenticate with the attacker key after recovery ---
 def test_attacker_access(vm_user, vm_ip):
     command = [
         "ssh",
@@ -57,11 +59,13 @@ def test_attacker_access(vm_user, vm_ip):
 
     print("=== Attacker Access Test ===")
 
+    # If the marker is returned, the unauthorized credential still works.
     if "ATTACKER_ACCESS_WORKS" in stdout:
         print("[VALIDATION FAILED] Attacker key can still log in.")
         print("[RISK] Repair did not fully remove attacker access.")
         return False
 
+    # Permission failure/non-zero SSH result is the expected secure outcome.
     if "Permission denied" in stderr or result.returncode != 0:
         print("[VALIDATION PASSED] Attacker key cannot log in.")
         print("[SECURITY RESTORED] Unauthorized SSH access has been removed.")
@@ -76,6 +80,7 @@ def test_attacker_access(vm_user, vm_ip):
 def main():
     print("=== Self-Healing Validation: Attacker SSH Access ===")
 
+    # --- Load the expected VM user from the baseline ---
     with open(BASELINE_FILE, "r", encoding="utf-8") as file:
         baseline = json.load(file)
 
@@ -85,6 +90,7 @@ def main():
     vm_ip = get_vm_ip_from_terraform()
     print(f"[INFO] VM IP: {vm_ip}")
 
+    # --- Final validation decision for attacker SSH access ---
     success = test_attacker_access(vm_user, vm_ip)
 
     print()

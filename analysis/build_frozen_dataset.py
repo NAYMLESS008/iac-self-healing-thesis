@@ -9,11 +9,13 @@ import csv
 from collections import Counter
 from pathlib import Path
 
+# --- Dataset locations ---
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 MANIFEST = RESULTS / "formal_run_manifest.csv"
 OUTPUT = RESULTS / "included_main_results.csv"
 
+# Each scenario maps to its source CSV and the human-readable label used in analysis.
 SCENARIOS = {
     "unauthorized_ssh_public_key": ("ssh_public_key_recovery_formal_results.csv", "Unauthorized SSH public-key persistence"),
     "unauthorized_local_user": ("local_user_recovery_formal_results.csv", "Unauthorized local user"),
@@ -22,6 +24,7 @@ SCENARIOS = {
     "unexpected_listener": ("listener_recovery_formal_results.csv", "Unexpected TCP listener"),
 }
 
+# Standardized output schema used by the later analysis scripts.
 FIELDS = [
     "run_id", "category", "data_quality", "scenario", "scenario_label",
     "timestamp_utc", "source_file", "source_row", "wazuh_detection",
@@ -42,16 +45,19 @@ FIELDS = [
 ]
 
 
+# --- Read a CSV file into dictionaries keyed by its header row ---
 def read_csv(path):
     with path.open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
 
+# --- Safely read one field and normalize None to the requested default ---
 def value(row, key, default=""):
     item = row.get(key, default)
     return default if item is None else item
 
 
+# --- Convert one scenario-specific source row into the common frozen schema ---
 def normalise(row, scenario, label, source_file, source_row, run_id):
     is_ssh = scenario == "unauthorized_ssh_public_key"
     is_cron = scenario == "malicious_cron_persistence"
@@ -102,14 +108,17 @@ def normalise(row, scenario, label, source_file, source_row, run_id):
 
 
 def main():
+    # --- Validate the manifest itself before reading scenario source files ---
     manifest = read_csv(MANIFEST)
     if len(manifest) != 25:
         raise SystemExit(f"Expected 25 manifest rows; found {len(manifest)}")
 
+    # The frozen design requires exactly five selected runs for each of five scenarios.
     counts = Counter(item["scenario"] for item in manifest)
     if set(counts) != set(SCENARIOS) or any(count != 5 for count in counts.values()):
         raise SystemExit(f"Expected five runs for each scenario; found {dict(counts)}")
 
+    # --- Index every source CSV by timestamp so manifest entries can be resolved exactly ---
     sources = {}
     for scenario, (filename, _) in SCENARIOS.items():
         rows = read_csv(RESULTS / filename)
@@ -118,6 +127,7 @@ def main():
             for index, row in enumerate(rows, start=1)
         }
 
+    # --- Resolve manifest rows, validate source consistency, and normalize each run ---
     counters = Counter()
     output_rows = []
     for item in manifest:
@@ -125,6 +135,8 @@ def main():
         expected_file, label = SCENARIOS[scenario]
         source_file = item["source_file"]
         timestamp = item["timestamp_utc"]
+
+        # These checks prevent a manifest row being silently matched to the wrong scenario/file.
         if source_file != expected_file:
             raise SystemExit(f"Unexpected source file for {scenario}: {source_file}")
         if timestamp not in sources[source_file]:
@@ -133,6 +145,8 @@ def main():
         source_row, row = sources[source_file][timestamp]
         if value(row, "scenario") != scenario:
             raise SystemExit(f"Scenario mismatch: {source_file} @ {timestamp}")
+
+        # Final-protocol main runs must contain the FIM-readiness field.
         if value(row, "fim_realtime_ready", "NOT_RECORDED") in {"", "NOT_RECORDED"}:
             raise SystemExit(f"Final-protocol run lacks FIM readiness: {source_file} @ {timestamp}")
 
@@ -140,11 +154,13 @@ def main():
         run_id = f"{scenario}_{counters[scenario]:02d}"
         output_rows.append(normalise(row, scenario, label, source_file, source_row, run_id))
 
+    # --- Write the exact 25 manifest-selected rows used for the main analysis ---
     with OUTPUT.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=FIELDS)
         writer.writeheader()
         writer.writerows(output_rows)
 
+    # final_result is reported after inclusion; it is not used above to choose rows.
     print(f"[OK] Wrote {len(output_rows)} frozen formal runs to {OUTPUT}")
     print(f"[OBSERVED OUTCOME] {sum(r['final_result'] == 'PASS' for r in output_rows)}/25 PASS")
 

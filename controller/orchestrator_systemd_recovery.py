@@ -8,10 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# --- Scenario result file ---
 RESULTS_DIR = Path("results")
 RESULTS_FILE = RESULTS_DIR / "systemd_recovery_formal_results.csv"
 
 
+# --- Parse one metric printed by a child recovery/validation script ---
 def extract_metric(
     output,
     metric_name,
@@ -34,6 +36,8 @@ def extract_metric(
 
     return match.group(1).strip()
 
+
+# --- Run one workflow stage and collect timing/stdout/stderr ---
 def run_step(name, command):
     print(f"\n[STEP] {name}")
     start_time = time.time()
@@ -67,6 +71,7 @@ def run_step(name, command):
     }
 
 
+# --- Append one formal systemd recovery run to CSV ---
 def log_result(row):
     RESULTS_DIR.mkdir(exist_ok=True)
     file_exists = RESULTS_FILE.exists()
@@ -110,6 +115,7 @@ def log_result(row):
         writer.writerow(row)
 
 
+# --- Stop at a failed gate and preserve the partial run record ---
 def stop_and_log(reason, row, workflow_start):
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
@@ -133,6 +139,7 @@ def main():
     print(" Starting malicious systemd recovery orchestrator ")
     print("================================================")
 
+    # --- Initialize end-to-end timing and result fields ---
     workflow_start = time.time()
 
     row = {
@@ -167,6 +174,7 @@ def main():
         "final_result": "",
     }
 
+    # --- Stage 1: Match Wazuh FIM alert + confirm service/script are still active ---
     detection = run_step(
         "Wazuh detection and active systemd confirmation",
         [
@@ -189,6 +197,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 2: Capture systemd service/script/process/Wazuh evidence ---
     evidence = run_step(
         "Evidence capture before replacement",
         [
@@ -216,6 +225,7 @@ def main():
         "evidence_completeness_percentage",
     )
 
+    # Evidence completeness is a pre-destruction gate.
     if not evidence["success"]:
         return stop_and_log(
             "FAILED_EVIDENCE_CAPTURE",
@@ -223,6 +233,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 3: Stop the compromised target VM ---
     quarantine = run_step(
         "Quarantine compromised target VM",
         [
@@ -244,6 +255,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 4: Remove stale Wazuh registration before the replacement registers ---
     cleanup = run_step(
         "Remove stale Wazuh agent registration",
         [
@@ -265,6 +277,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 5: Recreate the target using Terraform's forced replacement ---
     replacement = run_step(
         "Terraform replacement recovery",
         [
@@ -286,6 +299,7 @@ def main():
             workflow_start
         )
 
+    # --- Stage 6: Validate all systemd residual indicators + monitoring readiness ---
     validation = run_step(
         "Post-recovery systemd and monitoring validation",
         [
@@ -300,6 +314,7 @@ def main():
     )
     row["validation_duration_seconds"] = validation["duration"]
 
+    # Extract the validator's structured metrics from stdout.
     row["validation_indicators_total"] = extract_metric(
         validation["stdout"],
         "validation_indicators_total",
@@ -335,6 +350,7 @@ def main():
         "residual_compromise_score",
     )
 
+    # --- Final outcome and end-to-end duration ---
     row["total_duration_seconds"] = round(
         time.time() - workflow_start,
         2
@@ -344,6 +360,7 @@ def main():
         "PASS" if validation["success"] else "FAIL"
     )
 
+    # Do not mark the alert processed until the full recovery is successful.
     if validation["success"]:
         mark_selected_alert_processed(
             "malicious_systemd_persistence"
